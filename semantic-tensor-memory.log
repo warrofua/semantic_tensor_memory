@@ -439,4 +439,40 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 [1
 
 {/usr/local/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/usr/loc
-al/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc}
+al/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc}]
+
+LaTeX Warning: Reference `fig:pca' on page 2 undefined on input line 62.
+
+
+LaTeX Warning: File `stm_pca_example.png' not found on input line 69.
+
+
+./semantic-tensor-memory.tex:69: Package pdftex.def Error: File `stm_pca_exampl
+e.png' not found: using draft setting.
+
+See the pdftex.def package documentation for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.69 ...[width=0.7\textwidth]{stm_pca_example.png}
+                                                  
+? 
+./semantic-tensor-memory.tex:69: Emergency stop.
+ ...                                              
+                                                  
+l.69 ...[width=0.7\textwidth]{stm_pca_example.png}
+                                                  
+Try typing  <return>  to proceed.
+If that doesn't work, type  X <return>  to quit.
+
+ 
+Here is how much of TeX's memory you used:
+ 10733 strings out of 473190
+ 165738 string characters out of 5715801
+ 581265 words of memory out of 5000000
+ 33851 multiletter control sequences out of 15000+600000
+ 570579 words of font info for 80 fonts, out of 8000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 75i,6n,79p,749b,565s stack positions out of 10000i,1000n,20000p,200000b,200000s
+./semantic-tensor-memory.tex:69:  ==> Fatal error occurred, no output PDF file 
+produced!
