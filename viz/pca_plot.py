@@ -1,0 +1,224 @@
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+import torch, numpy as np
+from typing import List, Dict, Tuple
+from rich import print
+from rich.table import Table
+from rich.console import Console
+from .pca_summary import explain_pca_axes, generate_narrative_summary
+from .semantic_analysis import generate_clinical_summary, print_clinical_analysis
+
+def check_tensor_health(tensor: torch.Tensor, name: str = "tensor") -> bool:
+    """Check tensor for numerical issues and print diagnostics."""
+    is_healthy = True
+    
+    # Check for NaN/Inf
+    if torch.isnan(tensor).any():
+        print(f"[red]Warning:[/red] NaN values found in {name}")
+        is_healthy = False
+    if torch.isinf(tensor).any():
+        print(f"[red]Warning:[/red] Inf values found in {name}")
+        is_healthy = False
+        
+    # Check for zero rows
+    zero_rows = (tensor.abs().sum(dim=1) < 1e-6).sum().item()
+    if zero_rows > 0:
+        print(f"[yellow]Note:[/yellow] Found {zero_rows} zero rows in {name}")
+        
+    # Check for constant rows
+    row_vars = tensor.var(dim=1)
+    const_rows = (row_vars < 1e-6).sum().item()
+    if const_rows > 0:
+        print(f"[yellow]Note:[/yellow] Found {const_rows} constant rows in {name}")
+        is_healthy = False
+        
+    return is_healthy
+
+def prepare_for_pca(tensors: List[torch.Tensor]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Prepare tensor data for PCA with proper masking and checks."""
+    # Flatten and track indices
+    flat = torch.cat(tensors)
+    session_ids = np.repeat(np.arange(len(tensors)), [t.shape[0] for t in tensors])
+    token_ids = np.concatenate([np.arange(t.shape[0]) for t in tensors])
+    
+    # 1. Check for empty sessions
+    empty_sessions = [i for i, t in enumerate(tensors) if t.shape[0] == 0]
+    if empty_sessions:
+        print(f"[yellow]Warning:[/yellow] Found {len(empty_sessions)} empty sessions: {empty_sessions}")
+    
+    # 2. Check for NaN/Inf values
+    nan_mask = torch.isnan(flat).any(dim=1)
+    inf_mask = torch.isinf(flat).any(dim=1)
+    if nan_mask.any() or inf_mask.any():
+        print(f"[yellow]Warning:[/yellow] Found {nan_mask.sum().item()} NaN and {inf_mask.sum().item()} Inf values")
+        # Replace NaN/Inf with zeros
+        flat = torch.nan_to_num(flat, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    # 3. Check for zero rows (padding)
+    zero_mask = (flat.abs().sum(dim=1) < 1e-6)
+    if zero_mask.any():
+        print(f"[yellow]Warning:[/yellow] Found {zero_mask.sum().item()} zero rows (likely padding)")
+    
+    # 4. Check for constant rows (no variance)
+    row_vars = flat.var(dim=1)
+    const_mask = (row_vars < 1e-6)
+    if const_mask.any():
+        print(f"[yellow]Warning:[/yellow] Found {const_mask.sum().item()} constant rows")
+    
+    # 5. Combine all problematic rows
+    bad_rows = zero_mask | const_mask | nan_mask | inf_mask
+    
+    if bad_rows.any():
+        print(f"[yellow]Removing[/yellow] {bad_rows.sum().item()} problematic rows")
+        # Keep track of which rows we're removing
+        kept_indices = ~bad_rows
+        flat = flat[kept_indices]
+        session_ids = session_ids[kept_indices]
+        token_ids = token_ids[kept_indices]
+    
+    # 6. Normalize the data
+    # First, center the data
+    mean = flat.mean(dim=0)
+    flat = flat - mean
+    
+    # Then, scale by standard deviation (with epsilon to avoid division by zero)
+    std = flat.std(dim=0)
+    std = torch.where(std < 1e-6, torch.ones_like(std), std)  # Replace near-zero std with 1
+    flat = flat / std
+    
+    # 7. Final check for any remaining issues
+    if torch.isnan(flat).any() or torch.isinf(flat).any():
+        print("[red]Error:[/red] Still found NaN/Inf values after normalization")
+        # Last resort: replace with zeros
+        flat = torch.nan_to_num(flat, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    return flat.numpy(), session_ids, token_ids
+
+def interpret_pca(reduced: np.ndarray, session_ids: np.ndarray, token_ids: np.ndarray, 
+                 tensors: List[torch.Tensor], meta: List[Dict]) -> None:
+    """Analyze and print interpretation of PCA dimensions."""
+    # Find extreme points along each PCA axis
+    pca1_scores = reduced[:, 0]
+    pca2_scores = reduced[:, 1]
+    
+    extremes = {
+        'PCA1+': np.argmax(pca1_scores),
+        'PCA1-': np.argmin(pca1_scores),
+        'PCA2+': np.argmax(pca2_scores),
+        'PCA2-': np.argmin(pca2_scores)
+    }
+    
+    # Create rich table for interpretation
+    table = Table(title="PCA Dimension Interpretation")
+    table.add_column("Dimension")
+    table.add_column("Direction")
+    table.add_column("Session")
+    table.add_column("Text")
+    table.add_column("Score")
+    
+    for dim, idx in extremes.items():
+        pca_axis, direction = dim[:3], dim[3]
+        session_idx = session_ids[idx]
+        token_idx = token_ids[idx]
+        score = pca1_scores[idx] if pca_axis == 'PCA1' else pca2_scores[idx]
+        
+        # Get the full text for context
+        text = meta[session_idx]['text']
+        
+        table.add_row(
+            pca_axis,
+            direction,
+            f"Session {session_idx + 1}",
+            text,
+            f"{score:.3f}"
+        )
+    
+    console = Console()
+    console.print("\n[bold]PCA Dimension Analysis:[/bold]")
+    console.print(table)
+    
+    # Print semantic patterns
+    print("\n[bold]Observed Patterns:[/bold]")
+    pca1_pos_text = meta[session_ids[extremes['PCA1+']]]['text']
+    pca1_neg_text = meta[session_ids[extremes['PCA1-']]]['text']
+    
+    print(f"\nPCA-1 (Horizontal) appears to capture:")
+    print(f"→ Positive end: {pca1_pos_text}")
+    print(f"→ Negative end: {pca1_neg_text}")
+    
+    pca2_pos_text = meta[session_ids[extremes['PCA2+']]]['text']
+    pca2_neg_text = meta[session_ids[extremes['PCA2-']]]['text']
+    
+    print(f"\nPCA-2 (Vertical) appears to capture:")
+    print(f"→ Positive end: {pca2_pos_text}")
+    print(f"→ Negative end: {pca2_neg_text}")
+
+def plot(tensors: List[torch.Tensor], meta: List[Dict], title="Semantic Drift Map"):
+    """Create 2D PCA visualization of token embeddings from ragged tensors."""
+    # Prepare data for PCA
+    flat, session_ids, token_ids = prepare_for_pca(tensors)
+    
+    # PCA reduction with numerical stability
+    try:
+        pca = PCA(n_components=2)
+        reduced = pca.fit_transform(flat)
+        print(f"\n[green]PCA explained variance:[/green] {pca.explained_variance_ratio_}")
+    except Exception as e:
+        print(f"[red]Error in PCA:[/red] {str(e)}")
+        print("Falling back to random projection...")
+        # Fallback: random projection
+        np.random.seed(42)
+        proj = np.random.randn(flat.shape[1], 2)
+        reduced = flat @ proj
+    
+    # Generate and print narrative summary
+    print("\n" + generate_narrative_summary(reduced, session_ids, token_ids, meta))
+    
+    # Generate and print clinical analysis using Ollama
+    print("\n[bold]Generating clinical analysis...[/bold]")
+    clinical_analysis = generate_clinical_summary(reduced, session_ids, token_ids, meta)
+    print_clinical_analysis(clinical_analysis)
+    
+    # Plot
+    plt.figure(figsize=(10,6))
+    sc = plt.scatter(reduced[:,0], reduced[:,1], c=session_ids, 
+                    cmap="plasma", alpha=.8, s=50)
+    
+    # Add session boundaries
+    cumsum = np.cumsum([0] + [t.shape[0] for t in tensors])
+    for i in range(len(tensors)):
+        if cumsum[i] < len(reduced):  # Only plot if we have points
+            plt.axvline(x=reduced[cumsum[i],0], color='gray', alpha=0.3, linestyle='--')
+    
+    plt.colorbar(sc, label="Session #")
+    plt.title(title)
+    plt.xlabel("PCA-1")
+    plt.ylabel("PCA-2")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Add detailed axis interpretation
+    explain_pca_axes(reduced, session_ids, token_ids, meta)
+    
+    plt.show()
+
+def plot_drift(drifts: List[float], token_counts: List[int], title="Session Drift"):
+    """Plot drift scores with token count context."""
+    plt.figure(figsize=(10,4))
+    
+    # Plot drift scores
+    plt.plot(drifts, 'b-', label='Drift Score')
+    plt.scatter(range(len(drifts)), drifts, c='blue', s=50)
+    
+    # Add token count context
+    ax2 = plt.gca().twinx()
+    ax2.bar(range(len(token_counts)), token_counts, alpha=0.2, color='gray', label='Token Count')
+    
+    plt.title(title)
+    plt.xlabel("Session")
+    plt.ylabel("Drift Score")
+    ax2.set_ylabel("Token Count")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show() 

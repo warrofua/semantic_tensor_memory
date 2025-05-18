@@ -1,0 +1,101 @@
+% !TEX TS-program = pdflatex
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amsfonts}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{authblk}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\title{\bf Semantic Tensor Memory: A Structured Memory System for Tracking Meaning Across Time, Tokens, and Context}
+
+\author[1]{Joshua Farrow\thanks{Correspondence: joshuajamesfarrow@gmail.com}}
+\affil[1]{Independent Researcher, Richmond, VA, USA}
+
+\date{Draft -- June 2025}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We introduce \emph{Semantic Tensor Memory} (STM), a structured and interpretable memory system designed for tracking evolving meaning in conversational agents, clinical systems, and AI research. Unlike flat vector stores, STM maintains a three-dimensional tensor of token-level embeddings across sequential conversation steps---enabling temporal semantic drift analysis, relational clustering, and long-term, modular storage. We formalize the STM architecture, present visualization techniques for semantic drift, and illustrate applications in healthtech and reflective LLM-based agents. STM offers a foundation for next-generation interpretable memory models in both research and real-world domains.
+\end{abstract}
+
+\section{Introduction}
+Modern AI systems---from large language model (LLM) chatbots to clinical assistants---increasingly depend on external memory systems to maintain context, enable retrieval-augmented generation (RAG), and track user intent. However, most contemporary architectures rely on either a limited context window or flat vector stores, both of which summarize text at the sentence or chunk level. This approach misses the fine-grained, temporal evolution of meaning that is often critical for applications such as behavioral health, longitudinal coaching, or adaptive tutoring.
+
+We propose \textbf{Semantic Tensor Memory (STM)}: a 3D tensor structure that stores the sequence of token embeddings per conversation turn, providing a granular, interpretable representation of semantic change over time. This enables downstream agents---including LLMs---to reason over not just ``what'' was said, but ``how'' meaning and context have evolved.
+
+\section{Related Work}
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Vector databases and RAG:} Tools like Pinecone, Chroma, and LangChain enable retrieval-augmented LLMs, but focus on document or chunk-level retrieval.
+    \item \textbf{Memory-augmented neural networks:} Prior work (e.g., Differentiable Neural Computers, Transformer-XL) explores learnable tensor memories, but lacks user-facing interpretability.
+    \item \textbf{Semantic drift and behavioral analytics:} Behavioral science has long sought tools to monitor change in client language or intent, but current NLP applications rarely reach token-level granularity.
+\end{itemize}
+
+\section{STM Architecture}
+Let $T$ denote the number of conversation steps, $N$ the max tokens per turn, and $D$ the embedding dimension. STM is a tensor $M \in \mathbb{R}^{T \times N \times D}$ where $M_{t, n, :}$ is the embedding of token $n$ in step $t$.
+
+\vspace{0.5em}
+\textbf{Construction:}
+\begin{enumerate}[leftmargin=2em]
+    \item Tokenize each input with a transformer model (e.g., BERT).
+    \item For each step $t$, extract the last hidden state, yielding $N_t \times D$ token embeddings.
+    \item Pad/truncate to $N$ tokens per step; append to $M$.
+    \item (Optional) Attach metadata: timestamps, user IDs, context tags.
+\end{enumerate}
+
+\vspace{0.5em}
+\textbf{Implementation (PyTorch):}
+\begin{verbatim}
+inputs = tokenizer(sentence, return_tensors="pt")
+with torch.no_grad():
+    outputs = model(**inputs)
+memory_tensor.append(outputs.last_hidden_state)
+\end{verbatim}
+
+\section{Visualization and Drift Metrics}
+STM enables rich semantic analytics:
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{PCA/UMAP projections:} Flatten $M$ and project to 2D to visualize token-level clusters and their temporal drift (see Fig.~\ref{fig:pca}).
+    \item \textbf{Session mean trajectories:} Compute mean embedding per step to trace a user's semantic trajectory through latent space.
+    \item \textbf{Cosine drift heatmaps:} Quantify semantic change between steps by pairwise cosine distances.
+\end{itemize}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\textwidth]{stm_pca_example.png}
+    \caption{Example PCA projection of STM token embeddings across 5 sessions. Color encodes session; drift highlights evolving meaning.}
+    \label{fig:pca}
+\end{figure}
+
+\section{Applications}
+\subsection{Healthtech and ABA}
+STM enables early detection of behavioral drift in clinical notes or session logs, supporting interventions in autism, ADHD, or mental health. Token-level memory makes it possible to detect subtle language shifts missed by chunk-level summaries.
+
+\subsection{Reflective LLM Agents}
+STM can serve as a plug-in for LLM-based agents, providing a history-rich, token-aware context window. Agents can be prompted to explain not just what was said, but how meaning has shifted---enabling narrative coherence and meta-cognition.
+
+\subsection{Education and Coaching}
+Longitudinal STM tracks student or client learning progress, allowing adaptive tutoring, personalized support, and detection of concept drift.
+
+\section{Limitations and Future Work}
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Embedding model dependence:} STM quality depends on the expressivity of underlying transformer embeddings.
+    \item \textbf{Scalability:} High-frequency logs can lead to large tensors; summarization/compression required for production use.
+    \item \textbf{LLM integration:} Current LLMs require pre-processed textual summaries; direct ingestion of STM tensors awaits future multimodal models.
+    \item \textbf{Privacy:} Token-level memory may expose sensitive drift; privacy-preserving techniques and governance needed.
+\end{itemize}
+
+\section{Conclusion}
+Semantic Tensor Memory reframes AI memory from static recall to the continuous evolution of meaning---enabling interpretable, clinically relevant, and narratively coherent memory architectures. STM stands to advance AI safety, clinical transparency, and self-reflective agent design.
+
+\section*{Acknowledgments}
+Thanks to the open-source NLP and behavioral science communities for ongoing inspiration and feedback.
+
+\bibliographystyle{plain}
+\bibliography{stm_refs}
+
+\end{document}
