@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 import torch, numpy as np
 from typing import List, Dict, Tuple
@@ -7,6 +7,9 @@ from rich.table import Table
 from rich.console import Console
 from .pca_summary import explain_pca_axes, generate_narrative_summary
 from .semantic_analysis import generate_clinical_summary, print_clinical_analysis
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
 
 def check_tensor_health(tensor: torch.Tensor, name: str = "tensor") -> bool:
     """Check tensor for numerical issues and print diagnostics.
@@ -221,28 +224,31 @@ def plot(tensors: List[torch.Tensor], meta: List[Dict], title: str = "Semantic D
     clinical_analysis = generate_clinical_summary(reduced, session_ids, token_ids, meta)
     print_clinical_analysis(clinical_analysis)
     
-    # Plot
-    plt.figure(figsize=(10,6))
-    sc = plt.scatter(reduced[:,0], reduced[:,1], c=session_ids, 
-                    cmap="plasma", alpha=.8, s=50)
+    # Create DataFrame for plotting
+    df = pd.DataFrame({
+        'PCA1': reduced[:, 0],
+        'PCA2': reduced[:, 1],
+        'Session': [f"Session {i+1}" for i in session_ids],
+        'Text': [meta[i]['text'] for i in session_ids]
+    })
     
-    # Add session boundaries
-    cumsum = np.cumsum([0] + [t.shape[0] for t in tensors])
-    for i in range(len(tensors)):
-        if cumsum[i] < len(reduced):  # Only plot if we have points
-            plt.axvline(x=reduced[cumsum[i],0], color='gray', alpha=0.3, linestyle='--')
+    # Create scatter plot
+    fig = px.scatter(
+        df,
+        x='PCA1',
+        y='PCA2',
+        color='Session',
+        hover_data=['Text'],
+        title=title
+    )
     
-    plt.colorbar(sc, label="Session #")
-    plt.title(title)
-    plt.xlabel("PCA-1")
-    plt.ylabel("PCA-2")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
+    # Update layout
+    fig.update_layout(
+        hovermode="closest",
+        showlegend=True
+    )
     
-    # Add detailed axis interpretation
-    explain_pca_axes(reduced, session_ids, token_ids, meta)
-    
-    plt.show()
+    return fig
 
 def plot_drift(drifts: List[float], token_counts: List[int], title: str = "Session Drift"):
     """Plot drift scores with token count context.
@@ -257,21 +263,42 @@ def plot_drift(drifts: List[float], token_counts: List[int], title: str = "Sessi
         - Token counts as a bar plot
         - Grid lines for reference
     """
-    plt.figure(figsize=(10,4))
+    # Create DataFrame for plotting
+    df = pd.DataFrame({
+        'Session': list(range(len(drifts))),
+        'Drift Score': drifts,
+        'Token Count': token_counts
+    })
     
-    # Plot drift scores
-    plt.plot(drifts, 'b-', label='Drift Score')
-    plt.scatter(range(len(drifts)), drifts, c='blue', s=50)
+    # Create figure with secondary y-axis
+    fig = go.Figure()
     
-    # Add token count context
-    ax2 = plt.gca().twinx()
-    ax2.bar(range(len(token_counts)), token_counts, alpha=0.2, color='gray', label='Token Count')
+    # Add drift scores
+    fig.add_trace(go.Scatter(
+        x=df['Session'],
+        y=df['Drift Score'],
+        name="Drift Score",
+        line=dict(color='blue')
+    ))
     
-    plt.title(title)
-    plt.xlabel("Session")
-    plt.ylabel("Drift Score")
-    ax2.set_ylabel("Token Count")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.show() 
+    # Add token counts
+    fig.add_trace(go.Bar(
+        x=df['Session'],
+        y=df['Token Count'],
+        name="Token Count",
+        opacity=0.3,
+        marker_color='gray'
+    ))
+    
+    # Update layout
+    fig.update_layout(
+        title=title,
+        xaxis_title="Session",
+        yaxis_title="Drift Score",
+        hovermode="x unified",
+        showlegend=True
+    )
+    
+    return fig
+
+# plt.show() 

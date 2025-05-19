@@ -1,0 +1,31 @@
+date,time,ticker,event_type,text,price_open,price_close,volume
+2025-06-01,09:00,AAPL,earnings,"Apple released Q2 earnings, beating analyst expectations. Revenue up 8% YoY, iPhone sales strong.",189.50,192.10,32000000
+2025-06-01,13:00,AAPL,news,"Apple announced a new partnership with a major car manufacturer to integrate CarPlay.",192.10,193.00,15000000
+2025-06-01,15:30,AAPL,law_change,"New EU regulation on digital privacy announced, potentially impacting Apple’s App Store policies.",193.00,191.80,12000000
+2025-06-02,10:00,TSLA,earnings,"Tesla reported Q2 earnings, missing revenue targets but beating on profit. Margins improved.",178.20,180.50,28000000
+2025-06-02,14:00,TSLA,news,"Tesla announced expansion of its Berlin Gigafactory, aiming to double production by 2026.",180.50,182.00,17000000
+2025-06-02,16:00,TSLA,law_change,"German government introduced new EV subsidies, expected to benefit Tesla and other automakers.",182.00,183.20,9000000
+2025-06-03,09:30,GOOGL,earnings,"Alphabet posted strong ad revenue growth in Q2, cloud division profitability improved.",134.00,136.50,25000000
+2025-06-03,12:00,GOOGL,news,"Google announced a new AI-powered search feature rolling out globally.",136.50,137.20,11000000
+2025-06-03,15:00,GOOGL,law_change,"US Senate passed new data privacy law, requiring changes to Google’s ad targeting.",137.20,135.80,8000000
+2025-06-04,10:00,MSFT,earnings,"Microsoft reported record Azure growth, beating both revenue and profit estimates.",410.00,415.00,22000000
+2025-06-04,13:30,MSFT,news,"Microsoft announced acquisition of a cybersecurity startup for $1.2B.",415.00,416.50,9000000
+2025-06-04,16:00,MSFT,law_change,"New US antitrust investigation into cloud service providers, including Microsoft.",416.50,414.20,7000000
+2025-06-05,09:00,NVDA,earnings,"Nvidia reported Q2 earnings, with record data center revenue driven by AI demand.",1120.00,1135.00,18000000
+2025-06-05,12:30,NVDA,news,"Nvidia unveiled a new GPU architecture, promising 30% performance improvement.",1135.00,1140.00,8000000
+2025-06-05,15:30,NVDA,law_change,"China announced new export restrictions on rare earth minerals, impacting chipmakers.",1140.00,1128.00,6000000
+2025-06-06,10:00,AMZN,earnings,"Amazon beat Q2 earnings expectations, AWS growth accelerated, e-commerce margins improved.",185.00,188.00,21000000
+2025-06-06,13:00,AMZN,news,"Amazon announced expansion of same-day delivery to 10 new US cities.",188.00,189.20,9000000
+2025-06-06,16:00,AMZN,law_change,"FTC filed new antitrust lawsuit against Amazon’s logistics division.",189.20,187.50,7000000
+2025-06-07,09:30,TSLA,news,"Tesla’s new Model Y variant received top safety rating from NHTSA.",183.20,184.00,8000000
+2025-06-07,12:00,TSLA,law_change,"California passed new emissions standards, requiring more EV sales by 2030.",184.00,183.50,6000000
+2025-06-07,15:00,TSLA,news,"Tesla announced new battery technology with 20% longer range.",183.50,185.00,9000000
+2025-06-08,10:00,AAPL,news,"Apple’s WWDC keynote introduced new AI features for iOS 19.",191.80,193.00,12000000
+2025-06-08,13:30,AAPL,law_change,"US Supreme Court declined to hear Apple’s appeal in App Store antitrust case.",193.00,192.20,8000000
+2025-06-08,16:00,AAPL,news,"Apple announced new environmental initiatives for carbon neutrality by 2030.",192.20,192.80,7000000
+2025-06-09,09:00,GOOGL,news,"Google’s parent company Alphabet announced a $10B share buyback program.",135.80,136.50,9000000
+2025-06-09,12:00,GOOGL,law_change,"EU regulators fined Google $2.5B for anti-competitive practices.",136.50,135.00,7000000
+2025-06-09,15:30,GOOGL,news,"Google announced partnership with Samsung for new AI chip development.",135.00,135.80,6000000
+2025-06-10,10:00,MSFT,news,"Microsoft Teams rolled out new collaboration features for hybrid work.",414.20,415.00,8000000
+2025-06-10,13:00,MSFT,law_change,"UK Parliament passed new digital services tax, impacting Microsoft’s UK revenue.",415.00,413.50,6000000
+2025-06-10,16:00,MSFT,news,"Microsoft announced new sustainability goals for 2030.",413.50,414.00,5000000
