@@ -1,5 +1,9 @@
 torch>=2.2
 transformers==4.*
 scikit-learn
-matplotlib
-rich 
+plotly>=5.18.0
+streamlit>=1.32.0
+rich
+requests
+pandas
+numpy 
