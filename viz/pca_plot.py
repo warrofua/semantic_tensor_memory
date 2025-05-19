@@ -9,7 +9,21 @@ from .pca_summary import explain_pca_axes, generate_narrative_summary
 from .semantic_analysis import generate_clinical_summary, print_clinical_analysis
 
 def check_tensor_health(tensor: torch.Tensor, name: str = "tensor") -> bool:
-    """Check tensor for numerical issues and print diagnostics."""
+    """Check tensor for numerical issues and print diagnostics.
+    
+    Args:
+        tensor: Input tensor to check
+        name: Optional name for the tensor in diagnostic messages
+    
+    Returns:
+        bool: True if tensor is healthy, False if issues were found
+    
+    Checks for:
+        - NaN values
+        - Inf values
+        - Zero rows (potential padding)
+        - Constant rows (no variance)
+    """
     is_healthy = True
     
     # Check for NaN/Inf
@@ -35,7 +49,23 @@ def check_tensor_health(tensor: torch.Tensor, name: str = "tensor") -> bool:
     return is_healthy
 
 def prepare_for_pca(tensors: List[torch.Tensor]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Prepare tensor data for PCA with proper masking and checks."""
+    """Prepare tensor data for PCA with proper masking and checks.
+    
+    Args:
+        tensors: List of session embeddings, where each tensor has shape [tokens, embed_dim]
+    
+    Returns:
+        Tuple containing:
+            - flat: Flattened and normalized numpy array of shape [total_tokens, embed_dim]
+            - session_ids: Array mapping each point to its session
+            - token_ids: Array mapping each point to its token position
+    
+    This function handles:
+        - Flattening ragged tensors
+        - Removing problematic rows (NaN, Inf, zero, constant)
+        - Normalizing the data
+        - Maintaining session and token indices
+    """
     # Flatten and track indices
     flat = torch.cat(tensors)
     session_ids = np.repeat(np.arange(len(tensors)), [t.shape[0] for t in tensors])
@@ -153,8 +183,20 @@ def interpret_pca(reduced: np.ndarray, session_ids: np.ndarray, token_ids: np.nd
     print(f"→ Positive end: {pca2_pos_text}")
     print(f"→ Negative end: {pca2_neg_text}")
 
-def plot(tensors: List[torch.Tensor], meta: List[Dict], title="Semantic Drift Map"):
-    """Create 2D PCA visualization of token embeddings from ragged tensors."""
+def plot(tensors: List[torch.Tensor], meta: List[Dict], title: str = "Semantic Drift Map"):
+    """Create 2D PCA visualization of token embeddings from ragged tensors.
+    
+    Args:
+        tensors: List of session embeddings, where each tensor has shape [tokens, embed_dim]
+        meta: List of session metadata dictionaries
+        title: Optional title for the plot
+    
+    The plot shows:
+        - Token embeddings projected onto first two PCA components
+        - Color-coded by session
+        - Session boundaries marked with vertical lines
+        - Clinical and narrative summaries of the patterns
+    """
     # Prepare data for PCA
     flat, session_ids, token_ids = prepare_for_pca(tensors)
     
@@ -202,8 +244,19 @@ def plot(tensors: List[torch.Tensor], meta: List[Dict], title="Semantic Drift Ma
     
     plt.show()
 
-def plot_drift(drifts: List[float], token_counts: List[int], title="Session Drift"):
-    """Plot drift scores with token count context."""
+def plot_drift(drifts: List[float], token_counts: List[int], title: str = "Session Drift"):
+    """Plot drift scores with token count context.
+    
+    Args:
+        drifts: List of drift scores between consecutive sessions
+        token_counts: List of token counts per session
+        title: Optional title for the plot
+    
+    The plot shows:
+        - Drift scores as a line plot
+        - Token counts as a bar plot
+        - Grid lines for reference
+    """
     plt.figure(figsize=(10,4))
     
     # Plot drift scores

@@ -5,7 +5,14 @@ from typing import List
 from rich import print
 
 def heatmap(tensors: List[torch.Tensor]):
-    """Create session-to-session similarity heatmap from ragged tensors."""
+    """Create session-to-session similarity heatmap from ragged tensors.
+    
+    Args:
+        tensors: List of session embeddings, where each tensor has shape [tokens, embed_dim]
+    
+    The heatmap shows cosine distances between session means, with token counts
+    annotated on the diagonal. Darker colors indicate greater semantic drift.
+    """
     # Compute session means
     means = torch.stack([t.mean(0) for t in tensors])
     
@@ -38,7 +45,15 @@ def heatmap(tensors: List[torch.Tensor]):
     plt.show()
 
 def token_heatmap(tensors: List[torch.Tensor], window: int = 3):
-    """Create token-level drift heatmap for recent sessions."""
+    """Create token-level drift heatmap for recent sessions.
+    
+    Args:
+        tensors: List of session embeddings, where each tensor has shape [tokens, embed_dim]
+        window: Number of most recent sessions to analyze (default: 3)
+    
+    The heatmap shows token-to-token similarities within each recent session,
+    helping identify which tokens are drifting in meaning over time.
+    """
     if len(tensors) < window:
         return
     

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  18 MAY 2025 08:09
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  18 MAY 2025 21:54
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -342,7 +342,7 @@ File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count306
 \l__pdf_internal_box=\box55
 )
-No file semantic-tensor-memory.aux.
+(./semantic-tensor-memory.aux)
 \openout1 = `semantic-tensor-memory.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 19.
@@ -363,6 +363,7 @@ LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 19.
 LaTeX Font Info:    ... okay on input line 19.
 LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 19.
 LaTeX Font Info:    ... okay on input line 19.
+
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
 *geometry* verbose mode - [ preamble ] result:
@@ -398,8 +399,10 @@ LaTeX Font Info:    ... okay on input line 19.
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
 Package hyperref Info: Link coloring OFF on input line 19.
+(./semantic-tensor-memory.out) (./semantic-tensor-memory.out)
 \@outlinefile=\write3
 \openout3 = `semantic-tensor-memory.out'.
+
 
 (/usr/local/texlive/2025/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
@@ -441,38 +444,95 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 {/usr/local/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/usr/loc
 al/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc}]
 
-LaTeX Warning: Reference `fig:pca' on page 2 undefined on input line 62.
+[2]
+<demo_session-to-session_semantic_drift.png, id=82, 722.7pt x 578.16pt>
+File: demo_session-to-session_semantic_drift.png Graphic file (type png)
+<use demo_session-to-session_semantic_drift.png>
+Package pdftex.def Info: demo_session-to-session_semantic_drift.png  used on in
+put line 86.
+(pdftex.def)             Requested size: 328.82707pt x 263.0632pt.
+<demo_drift_map.png, id=84, 722.7pt x 433.62pt>
+File: demo_drift_map.png Graphic file (type png)
+<use demo_drift_map.png>
+Package pdftex.def Info: demo_drift_map.png  used on input line 93.
+(pdftex.def)             Requested size: 328.82707pt x 197.29741pt.
 
 
-LaTeX Warning: File `stm_pca_example.png' not found on input line 69.
+LaTeX Warning: `h' float specifier changed to `ht'.
 
 
-./semantic-tensor-memory.tex:69: Package pdftex.def Error: File `stm_pca_exampl
-e.png' not found: using draft setting.
+Overfull \hbox (12.16603pt too wide) in paragraph at lines 104--105
+\OT1/cmr/m/n/10.95 STM de-tects se-man-tic drift in con-sumer con-ver-sa-tions,
+ prod-uct re-views, and me-dia cov-er-age|enabling
+ []
 
-See the pdftex.def package documentation for explanation.
-Type  H <return>  for immediate help.
- ...                                              
-                                                  
-l.69 ...[width=0.7\textwidth]{stm_pca_example.png}
-                                                  
-? 
-./semantic-tensor-memory.tex:69: Emergency stop.
- ...                                              
-                                                  
-l.69 ...[width=0.7\textwidth]{stm_pca_example.png}
-                                                  
-Try typing  <return>  to proceed.
-If that doesn't work, type  X <return>  to quit.
 
- 
+
+[3 <./demo_session-to-session_semantic_drift.png>]
+
+[4 <./demo_drift_map.png>]
+<summary_image.png, id=97, 1541.76pt x 1027.84pt>
+File: summary_image.png Graphic file (type png)
+<use summary_image.png>
+Package pdftex.def Info: summary_image.png  used on input line 148.
+(pdftex.def)             Requested size: 328.82707pt x 219.20905pt.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+
+[5]
+No file semantic-tensor-memory.bbl.
+
+
+[6 <./summary_image.png (PNG copy)>] (./semantic-tensor-memory.aux)
+ ***********
+LaTeX2e <2024-11-01> patch level 2
+L3 programming layer <2025-01-18>
+ ***********
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+
+Package rerunfilecheck Warning: File `semantic-tensor-memory.out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+Package rerunfilecheck Info: Checksums for `semantic-tensor-memory.out':
+(rerunfilecheck)             Before: F9C7A6137EE397E23D81A3AA74604073;2299
+(rerunfilecheck)             After:  D83F05EA81B18E9B592695EFE12D2CC2;2931.
+ ) 
 Here is how much of TeX's memory you used:
- 10733 strings out of 473190
- 165738 string characters out of 5715801
- 581265 words of memory out of 5000000
- 33851 multiletter control sequences out of 15000+600000
- 570579 words of font info for 80 fonts, out of 8000000 for 9000
+ 10782 strings out of 473190
+ 166296 string characters out of 5715801
+ 582803 words of memory out of 5000000
+ 33867 multiletter control sequences out of 15000+600000
+ 570886 words of font info for 81 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,6n,79p,749b,565s stack positions out of 10000i,1000n,20000p,200000b,200000s
-./semantic-tensor-memory.tex:69:  ==> Fatal error occurred, no output PDF file 
-produced!
+ 75i,6n,79p,842b,564s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb
+></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb>
+</usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb><
+/usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></u
+sr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></usr
+/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/l
+ocal/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/loc
+al/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/
+texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/local/tex
+live/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texl
+ive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texliv
+e/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/local/texlive
+/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/local/texlive/
+2025/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/local/texl
+ive/2025/texmf-dist/fonts/type1/public/cm-super/sfrm0600.pfb></usr/local/texliv
+e/2025/texmf-dist/fonts/type1/public/cm-super/sfrm0800.pfb></usr/local/texlive/
+2025/texmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb>
+Output written on semantic-tensor-memory.pdf (6 pages, 2114895 bytes).
+PDF statistics:
+ 191 PDF objects out of 1000 (max. 8388607)
+ 142 compressed objects within 2 object streams
+ 30 named destinations out of 1000 (max. 500000)
+ 112 words of extra memory for PDF output out of 10000 (max. 10000000)
+
