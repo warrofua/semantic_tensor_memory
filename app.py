@@ -154,147 +154,99 @@ def is_ollama_model_available(model_name):
 
 def render_chat_analysis_panel(context=None, tab_id=None):
     selected_model = st.session_state["selected_model"]
-    # Use a separate chat history per tab for context fidelity
     chat_key = f"chat_history_{tab_id}" if tab_id else "chat_history"
+    
     if chat_key not in st.session_state:
         st.session_state[chat_key] = []
+    
     chat_history = st.session_state[chat_key]
-
-    if not is_ollama_model_available(selected_model):
-        st.warning(
-            f"The model '{selected_model}' is not available in your local Ollama. "
-            f"To download it, run this command in your terminal:\n\n"
-            f"```sh\nollama pull {selected_model}\n```"
-        )
-        st.stop()
-
-    # Build context-aware prompt
-    prompt = None
-    if context is not None:
-        if tab_id == "drift":
-            drift_summary = f"Drift scores between sessions: {context['drifts'][:5]}... (showing first 5 of {len(context['drifts'])})"
-            prompt = (
-                "Based on the following drift analysis, identify any notable changes or patterns in the session data.\n"
-                f"{drift_summary}\n"
-                "What behavioral or semantic trends do you observe? What might explain the largest changes?"
+    
+    # Check for streaming state
+    streaming_key = f'streaming_{tab_id}' if tab_id else 'streaming'
+    is_streaming = st.session_state.get(streaming_key, False)
+    
+    # Show buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        explain_clicked = st.button("Explain", key=f"explain_btn_{tab_id}", disabled=is_streaming)
+    
+    with col2:
+        if is_streaming:
+            pause_clicked = st.button("Pause", key=f"pause_btn_{tab_id}")
+            if pause_clicked:
+                st.session_state[streaming_key] = False
+                st.rerun()
+    
+    # Handle Explain button click
+    if explain_clicked:
+        st.session_state[streaming_key] = True
+        
+        if not is_ollama_model_available(selected_model):
+            st.warning(
+                f"The model '{selected_model}' is not available in your local Ollama. "
+                f"To download it, run this command in your terminal:\n\n"
+                f"```sh\nollama pull {selected_model}\n```"
             )
-        elif tab_id == "pca2d":
-            prompt = (
-                "Here is a 2D PCA map of session embeddings. The explained variance ratios are: "
-                f"{context.get('explained_variance', '')}.\n"
-                f"Narrative summary: {context.get('narrative_summary', '')}\n"
-                "What are the main behavioral or semantic axes represented here? Summarize the key patterns."
-            )
-        elif tab_id == "pca3d":
-            prompt = (
-                "Here is a 3D PCA map of session embeddings. The explained variance ratios are: "
-                f"{context.get('explained_variance', '')}.\n"
-                "Describe the main axes and any notable clusters or outliers."
-            )
-        elif tab_id == "heatmap":
-            prompt = (
-                "This is a session-to-session semantic drift heatmap.\n"
-                f"Notable distances: {context.get('notable_distances', '')}\n"
-                "What does this tell us about the similarity or change between sessions?"
-            )
-        elif tab_id == "trajectory":
-            prompt = (
-                "This is a 3D token trajectory for a session.\n"
-                f"High-drift tokens: {context.get('high_drift_tokens', '')}\n"
-                "What can we infer about the semantic flow or key transitions in this session?"
-            )
+            st.session_state[streaming_key] = False
+            return
+        
+        # Create prompt based on context
+        if context:
+            prompt_parts = ["Analyze this semantic tensor memory data:"]
+            for key, value in context.items():
+                prompt_parts.append(f"{key}: {value}")
+            prompt_parts.append("\nPlease provide actionable recommendations for next steps or interventions.")
+            prompt = "\n".join(prompt_parts)
         else:
-            prompt = context.get('default_prompt', 'Analyze the provided session data for behavioral patterns and significance.')
-    # Fallback to PCA-based prompt if available and not already set
-    if prompt is None and 'pca_results' in st.session_state:
-        reduced = st.session_state.pca_results['reduced']
-        session_ids = st.session_state.pca_results['session_ids']
-        token_ids = st.session_state.pca_results['token_ids']
-        meta = st.session_state.pca_results['meta']
-        axis_examples = []
-        for axis, col in enumerate(['PCA-1', 'PCA-2']):
-            max_idx = session_ids[np.argmax(reduced[:, axis])]
-            min_idx = session_ids[np.argmin(reduced[:, axis])]
-            max_text = meta[max_idx]['text']
-            min_text = meta[min_idx]['text']
-            axis_examples.append((col, max_text, min_text))
-        prompt = (
-            "Analyze these session notes to identify key behavioral patterns and their significance.\n"
-            "For each principal component (PCA axis), describe the main differences between the sessions at the two extremes of the axis.\n\n"
-        )
-        for col, max_text, min_text in axis_examples:
-            prompt += (
-                f"{col}:\n"
-                f"Session at one extreme:\n{max_text}\n"
-                f"Session at the other extreme:\n{min_text}\n\n"
-            )
-        prompt += (
-            "For each axis, provide:\n"
-            "1. A description of what distinguishes the sessions at each end.\n"
-            "2. Key behavioral or thematic patterns identified.\n"
-            "3. The significance of these patterns.\n"
-            "4. Notable transitions or changes.\n"
-            "5. Actionable recommendations for next steps or interventions.\n\n"
-            "Keep the analysis concise, relevant, and end with clear recommendations.\n"
-        )
-    if not chat_history:
-        def stream_ollama_response(prompt):
+            prompt = "Please analyze the current semantic tensor memory data and provide actionable recommendations."
+        
+        def stream_ollama_response(prompt_text):
             url = "http://localhost:11434/api/generate"
             payload = {
                 "model": selected_model,
-                "prompt": prompt,
+                "prompt": prompt_text,
                 "stream": True
             }
-            with requests.post(url, json=payload, stream=True, timeout=180) as r:
-                for line in r.iter_lines():
-                    if line:
-                        try:
-                            import json as _json
-                            data = _json.loads(line.decode("utf-8"))
-                            yield data.get("response", "")
-                        except Exception:
-                            continue
+            try:
+                with requests.post(url, json=payload, stream=True, timeout=180) as r:
+                    for line in r.iter_lines():
+                        if not st.session_state.get(streaming_key, False):
+                            break
+                        if line:
+                            try:
+                                import json as _json
+                                data = _json.loads(line.decode("utf-8"))
+                                yield data.get("response", "")
+                            except Exception:
+                                continue
+            except Exception as e:
+                yield f"Error connecting to Ollama: {e}"
+        
         with st.chat_message("assistant"):
             placeholder = st.empty()
             streamed = ""
             for token in stream_ollama_response(prompt):
+                if not st.session_state.get(streaming_key, False):
+                    break
                 streamed += token
                 placeholder.markdown(streamed)
-        st.session_state[chat_key].append(("assistant", streamed))
-        add_chat_message("assistant", streamed)
-    else:
-        for role, msg in chat_history:
-            with st.chat_message(role):
-                st.markdown(msg)
-    user_input = st.chat_input("Ask a follow-up about the analysis or data...")
-    if user_input:
+            
+            # Finalize the response
+            st.session_state[chat_key].append(("assistant", streamed))
+            add_chat_message("assistant", streamed)
+            st.session_state[streaming_key] = False
+    
+    # Display chat history
+    for role, msg in chat_history:
+        with st.chat_message(role):
+            st.markdown(msg)
+    
+    # User input
+    user_input = st.chat_input("Ask a follow-up about the analysis or data...", key=f"chat_input_{chat_key}")
+    if user_input and not is_streaming:
         st.session_state[chat_key].append(("user", user_input))
         add_chat_message("user", user_input)
-        followup_prompt = user_input + "\n\nPlease provide actionable recommendations for next steps or interventions based on this follow-up analysis."
-        def stream_ollama_response(prompt):
-            url = "http://localhost:11434/api/generate"
-            payload = {
-                "model": selected_model,
-                "prompt": prompt,
-                "stream": True
-            }
-            with requests.post(url, json=payload, stream=True, timeout=180) as r:
-                for line in r.iter_lines():
-                    if line:
-                        try:
-                            import json as _json
-                            data = _json.loads(line.decode("utf-8"))
-                            yield data.get("response", "")
-                        except Exception:
-                            continue
-        with st.chat_message("assistant"):
-            placeholder = st.empty()
-            streamed = ""
-            for token in stream_ollama_response(followup_prompt):
-                streamed += token
-                placeholder.markdown(streamed)
-        st.session_state[chat_key].append(("assistant", streamed))
-        add_chat_message("assistant", streamed)
+        st.rerun()
 
 def main():
     # Prevent rerun loop after CSV import
@@ -383,293 +335,300 @@ def main():
     # Main content area
     if len(st.session_state.memory) > 0:
         # Create tabs for different visualizations
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            "Drift Analysis", "PCA Map", "3D PCA Map", "Heatmap", "Token Trajectory (3D)", "Clinical Analysis & Chat"
-        ])
-        
-        with tab1:
-            st.header("Drift Analysis")
-            if len(st.session_state.memory) > 1:
-                drifts, counts = drift_series(st.session_state.memory)
-                fig = plot_drift_plotly(drifts, counts)
-                st.plotly_chart(fig, use_container_width=True)
-                drift_data = []
-                for i, (d, c) in enumerate(zip(drifts, counts)):
-                    drift_data.append({
-                        "Session": f"{i+1} → {i+2}",
-                        "Drift Score": f"{d:.3f}",
-                        "Token Count": c
-                    })
-                st.table(pd.DataFrame(drift_data))
-            else:
-                st.warning("Need ≥2 sessions to plot drift.")
-            render_chat_analysis_panel(context={'drifts': drifts[:5], 'drifts_full': drifts}, tab_id="drift")
-        
-        with tab2:
-            st.header("PCA Map")
-            if len(st.session_state.memory) > 1:
-                max_session = len(st.session_state.memory)
-                if 'pca2d_played' not in st.session_state or not st.session_state.pca2d_played:
-                    st.session_state.pca2d_played = True
-                    for i in range(2, max_session + 1):
-                        st.session_state['timeline2d'] = i
-                        time.sleep(0.08)
-                        st.rerun()
-                timeline_idx = st.slider(
-                    "Timeline: Show up to session",
-                    2, max_session,
-                    st.session_state.get('timeline2d', max_session),
-                    1,
-                    key="timeline2d"
-                )
-                memory_slice = st.session_state.memory[:timeline_idx]
-                meta_slice = st.session_state.meta[:timeline_idx]
-                from viz.pca_plot import prepare_for_pca
-                import warnings
-                import traceback
-                try:
-                    flat, session_ids, token_ids = prepare_for_pca(memory_slice)
-                    # Robust data validation
-                    if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                        st.error("Data contains NaN, Inf, or extremely large values. Please check your input data.")
-                        return
-                    flat = (flat - np.mean(flat, axis=0)) / np.std(flat, axis=0)
-                    if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                        st.error("Data contains NaN, Inf, or extremely large values after normalization. Please check your input data.")
-                        return
-                    from sklearn.decomposition import PCA
-                    pca = PCA(n_components=2)
-                    reduced = pca.fit_transform(flat)
-                    # Create DataFrame for plotting
-                    df = pd.DataFrame({
-                        'PCA1': reduced[:, 0],
-                        'PCA2': reduced[:, 1],
-                        'Session': [f"Session {i+1}" for i in session_ids],
-                        'SessionIdx': session_ids,
-                        'Text': [meta_slice[i]['text'] for i in session_ids]
-                    })
-                    fig = px.scatter(
-                        df,
-                        x='PCA1',
-                        y='PCA2',
-                        color='SessionIdx',
-                        color_continuous_scale='RdYlBu',
-                        range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
-                        hover_data=['Session', 'Text'],
-                        title="Semantic Drift Map"
-                    )
-                    fig.update_traces(marker=dict(reversescale=True))
-                    fig.update_layout(
-                        hovermode="closest",
-                        showlegend=False,
-                        coloraxis_colorbar=dict(title="Session")
-                    )
-                    # Feature labels for 2D
-                    extremes = []
-                    for axis, col in enumerate(['PCA1', 'PCA2']):
-                        max_idx = df[col].idxmax()
-                        min_idx = df[col].idxmin()
-                        for idx, label in zip([max_idx, min_idx], [f"{col} +", f"{col} -"]):
-                            text_excerpt = ' '.join(df.loc[idx, 'Text'].split()[:6]) + ('...' if len(df.loc[idx, 'Text'].split()) > 6 else '')
-                            extremes.append({
-                                'PCA1': float(df.loc[idx, 'PCA1']),
-                                'PCA2': float(df.loc[idx, 'PCA2']),
-                                'label': f"{label}: {text_excerpt}"
-                            })
-                    for ex in extremes:
-                        fig.add_trace(go.Scatter(
-                            x=[ex['PCA1']], y=[ex['PCA2']],
-                            mode='markers+text',
-                            marker=dict(size=10, color='black', symbol='diamond'),
-                            text=[ex['label']],
-                            textposition='top center',
-                            showlegend=False
-                        ))
-                    st.plotly_chart(fig, use_container_width=True)
-                    st.write(f"PCA explained variance: {pca.explained_variance_ratio_}")
-                    from viz.pca_summary import generate_narrative_summary
-                    summary = generate_narrative_summary(reduced, session_ids, token_ids, meta_slice)
-                    st.subheader("Narrative Summary")
-                    st.info(summary)
-                    # Store PCA results in session state for use in clinical tab
-                    st.session_state.pca_results = {
-                        'reduced': reduced,
-                        'session_ids': session_ids,
-                        'token_ids': token_ids,
-                        'meta': meta_slice
-                    }
-                except Exception as e:
-                    st.error(f"PCA failed: {e}")
-            else:
-                st.warning("Need ≥2 sessions for PCA analysis.")
-            render_chat_analysis_panel(context={'explained_variance': f"{pca.explained_variance_ratio_:.2%}", 'narrative_summary': summary}, tab_id="pca2d")
-        
-        with tab3:
-            st.header("3D PCA Map")
-            if len(st.session_state.memory) > 1:
-                max_session = len(st.session_state.memory)
-                if 'pca3d_played' not in st.session_state or not st.session_state.pca3d_played:
-                    st.session_state.pca3d_played = True
-                    for i in range(2, max_session + 1):
-                        st.session_state['timeline3d'] = i
-                        time.sleep(0.08)
-                        st.rerun()
-                timeline_idx = st.slider(
-                    "Timeline: Show up to session",
-                    2, max_session,
-                    st.session_state.get('timeline3d', max_session),
-                    1,
-                    key="timeline3d"
-                )
-                memory_slice = st.session_state.memory[:timeline_idx]
-                meta_slice = st.session_state.meta[:timeline_idx]
-                from viz.pca_plot import prepare_for_pca
-                import warnings
-                import traceback
-                try:
-                    flat, session_ids, token_ids = prepare_for_pca(memory_slice)
-                    # Robust data validation
-                    if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                        st.error("Data contains NaN, Inf, or extremely large values. Please check your input data.")
-                        return
-                    flat = (flat - np.mean(flat, axis=0)) / np.std(flat, axis=0)
-                    if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                        st.error("Data contains NaN, Inf, or extremely large values after normalization. Please check your input data.")
-                        return
-                    from sklearn.decomposition import PCA
-                    pca = PCA(n_components=3)
-                    reduced = pca.fit_transform(flat)
-                    # Create DataFrame for plotting
-                    df = pd.DataFrame({
-                        'PCA1': reduced[:, 0],
-                        'PCA2': reduced[:, 1],
-                        'PCA3': reduced[:, 2],
-                        'Session': [f"Session {i+1}" for i in session_ids],
-                        'SessionIdx': session_ids,
-                        'Text': [meta_slice[i]['text'] for i in session_ids]
-                    })
-                    # Find axis extremes for feature labeling
-                    extremes = []
-                    for axis, col in enumerate(['PCA1', 'PCA2', 'PCA3']):
-                        max_idx = df[col].idxmax()
-                        min_idx = df[col].idxmin()
-                        for idx, label in zip([max_idx, min_idx], [f"{col} +", f"{col} -"]):
-                            text_excerpt = ' '.join(df.loc[idx, 'Text'].split()[:6]) + ('...' if len(df.loc[idx, 'Text'].split()) > 6 else '')
-                            extremes.append({
-                                'PCA1': float(df.loc[idx, 'PCA1']),
-                                'PCA2': float(df.loc[idx, 'PCA2']),
-                                'PCA3': float(df.loc[idx, 'PCA3']),
-                                'label': f"{label}: {text_excerpt}"
-                            })
-                    fig = px.scatter_3d(
-                        df,
-                        x='PCA1',
-                        y='PCA2',
-                        z='PCA3',
-                        color='SessionIdx',
-                        color_continuous_scale='RdYlBu',
-                        range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
-                        hover_data=['Session', 'Text'],
-                        title="3D Semantic Drift Map"
-                    )
-                    fig.update_traces(marker=dict(size=4, reversescale=True))
-                    fig.update_layout(
-                        scene = dict(
-                            xaxis_title='<b>PCA-1</b><br><span style="font-size:12px; color:gray">Semantic Dimension 1</span>',
-                            yaxis_title='<b>PCA-2</b><br><span style="font-size:12px; color:gray">Semantic Dimension 2</span>',
-                            zaxis_title='<b>PCA-3</b><br><span style="font-size:12px; color:gray">Semantic Dimension 3</span>',
-                        ),
-                        coloraxis_colorbar=dict(title="Session"),
-                        margin=dict(l=0, r=0, b=0, t=40)
-                    )
-                    # Add feature labels at axis extremes
-                    for ex in extremes:
-                        fig.add_trace(go.Scatter3d(
-                            x=[ex['PCA1']], y=[ex['PCA2']], z=[ex['PCA3']],
-                            mode='markers+text',
-                            marker=dict(size=10, color='black', symbol='diamond'),
-                            text=[ex['label']],
-                            textposition='top center',
-                            showlegend=False
-                        ))
-                    st.plotly_chart(fig, use_container_width=True)
-                    st.write(f"PCA explained variance: {pca.explained_variance_ratio_}")
-                except Exception as e:
-                    st.error(f"3D PCA failed: {e}")
-            else:
-                st.warning("Need ≥2 sessions for 3D PCA analysis.")
-            render_chat_analysis_panel(context={'explained_variance': f"{pca.explained_variance_ratio_:.2%}"}, tab_id="pca3d")
-        
-        with tab4:
-            st.header("Session Heatmap")
-            if len(st.session_state.memory) > 1:
-                fig = plot_heatmap_plotly(st.session_state.memory)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("Need ≥2 sessions for heatmap analysis.")
-            render_chat_analysis_panel(context={'notable_distances': "No notable distances found"}, tab_id="heatmap")
-        
-        with tab5:
-            st.header("Token Trajectory (3D)")
-            if len(st.session_state.memory) > 0:
-                session_idx = st.selectbox(
-                    "Select session to visualize:",
-                    options=list(range(len(st.session_state.memory))),
-                    format_func=lambda i: f"Session {i+1}"
-                )
-                tensor = st.session_state.memory[session_idx]
-                embeddings = tensor.numpy()
-                session_text = st.session_state.meta[session_idx]['text'] if 'text' in st.session_state.meta[session_idx] else ''
-                if embeddings.shape[0] < 2:
-                    st.warning("Session has fewer than 2 tokens; cannot plot trajectory.")
-                else:
-                    # Robust data validation
-                    if np.isnan(embeddings).any() or np.isinf(embeddings).any() or np.abs(embeddings).max() > 1e6:
-                        st.error("Token embeddings contain NaN, Inf, or extremely large values. Cannot plot trajectory.")
-                    else:
-                        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-                        tokens = tokenizer.tokenize(session_text)
-                        if len(tokens) > embeddings.shape[0]:
-                            tokens = tokens[:embeddings.shape[0]]
-                        elif len(tokens) < embeddings.shape[0]:
-                            tokens += [''] * (embeddings.shape[0] - len(tokens))
-                        from sklearn.decomposition import PCA
-                        pca = PCA(n_components=3)
-                        embeddings_3d = pca.fit_transform(embeddings)
-                        # Compute drift between consecutive tokens in 3D
-                        drift = np.linalg.norm(np.diff(embeddings_3d, axis=0), axis=1)
-                        drift = np.insert(drift, 0, 0)  # First token has no previous
-                        # Highlight tokens with high drift (mean + std)
-                        high_drift = drift > (drift.mean() + drift.std())
-                        colors = np.where(high_drift, 'red', 'blue')
-                        hover_text = [f"{tok}<br>Drift: {d:.3f}" for tok, d in zip(tokens, drift)]
-                        fig = go.Figure(data=[go.Scatter3d(
-                            x=embeddings_3d[:,0],
-                            y=embeddings_3d[:,1],
-                            z=embeddings_3d[:,2],
-                            mode='lines+markers',
-                            marker=dict(size=6, color=colors, opacity=0.8),
-                            line=dict(width=2),
-                            text=hover_text,
-                            hoverinfo='text'
-                        )])
-                        fig.update_layout(
-                            title=f'Token Trajectory in 3D Embedding Space (Session {session_idx+1})',
-                            scene = dict(
-                                xaxis_title='PCA-1',
-                                yaxis_title='PCA-2',
-                                zaxis_title='PCA-3',
-                            ),
-                            margin=dict(l=0, r=0, b=0, t=40)
-                        )
+        tab_names = ["Drift Analysis", "PCA Map", "3D PCA Map", "Heatmap", "Token Trajectory (3D)", "Clinical Analysis & Chat"]
+        tab_objects = st.tabs(tab_names)
+        for i, tab in enumerate(tab_objects):
+            with tab:
+                if i == 0:
+                    st.header("Drift Analysis")
+                    if len(st.session_state.memory) > 1:
+                        drifts, counts = drift_series(st.session_state.memory)
+                        fig = plot_drift_plotly(drifts, counts)
                         st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No sessions available to visualize.")
-            render_chat_analysis_panel(context={'high_drift_tokens': "No high-drift tokens found"}, tab_id="trajectory")
-        
-        with tab6:
-            st.header("Clinical Analysis & Chat")
-            render_chat_analysis_panel()
+                        drift_data = []
+                        for j, (d, c) in enumerate(zip(drifts, counts)):
+                            drift_data.append({
+                                "Session": f"{j+1} → {j+2}",
+                                "Drift Score": f"{d:.3f}",
+                                "Token Count": c
+                            })
+                        st.table(pd.DataFrame(drift_data))
+                        render_chat_analysis_panel(context={'drifts': drifts[:5], 'drifts_full': drifts}, tab_id="drift")
+                    else:
+                        st.warning("Need ≥2 sessions to plot drift.")
+                        render_chat_analysis_panel(context={'drifts': [], 'drifts_full': []}, tab_id="drift")
+                elif i == 1:
+                    st.header("PCA Map")
+                    explained_variance_str = ""
+                    summary = ""
+                    if len(st.session_state.memory) > 1:
+                        max_session = len(st.session_state.memory)
+                        if 'pca2d_played' not in st.session_state or not st.session_state.pca2d_played:
+                            st.session_state.pca2d_played = True
+                            for j in range(2, max_session + 1):
+                                st.session_state['timeline2d'] = j
+                                time.sleep(0.08)
+                                st.rerun()
+                        timeline_idx = st.slider(
+                            "Timeline: Show up to session",
+                            2, max_session,
+                            st.session_state.get('timeline2d', max_session),
+                            1,
+                            key="timeline2d"
+                        )
+                        memory_slice = st.session_state.memory[:timeline_idx]
+                        meta_slice = st.session_state.meta[:timeline_idx]
+                        from viz.pca_plot import prepare_for_pca
+                        import warnings
+                        import traceback
+                        try:
+                            flat, session_ids, token_ids = prepare_for_pca(memory_slice)
+                            # Robust data validation
+                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
+                                st.error("Data contains NaN, Inf, or extremely large values. Please check your input data.")
+                                return
+                            flat = (flat - np.mean(flat, axis=0)) / np.std(flat, axis=0)
+                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
+                                st.error("Data contains NaN, Inf, or extremely large values after normalization. Please check your input data.")
+                                return
+                            from sklearn.decomposition import PCA
+                            pca = PCA(n_components=2)
+                            reduced = pca.fit_transform(flat)
+                            # Create DataFrame for plotting
+                            df = pd.DataFrame({
+                                'PCA1': reduced[:, 0],
+                                'PCA2': reduced[:, 1],
+                                'Session': [f"Session {j+1}" for j in session_ids],
+                                'SessionIdx': session_ids,
+                                'Text': [meta_slice[j]['text'] for j in session_ids]
+                            })
+                            fig = px.scatter(
+                                df,
+                                x='PCA1',
+                                y='PCA2',
+                                color='SessionIdx',
+                                color_continuous_scale='RdYlBu',
+                                range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
+                                hover_data=['Session', 'Text'],
+                                title="Semantic Drift Map"
+                            )
+                            fig.update_traces(marker=dict(reversescale=True))
+                            fig.update_layout(
+                                hovermode="closest",
+                                showlegend=False,
+                                coloraxis_colorbar=dict(title="Session")
+                            )
+                            # Feature labels for 2D
+                            extremes = []
+                            for axis, col in enumerate(['PCA1', 'PCA2']):
+                                max_idx = df[col].idxmax()
+                                min_idx = df[col].idxmin()
+                                for idx, label in zip([max_idx, min_idx], [f"{col} +", f"{col} -"]):
+                                    text_excerpt = ' '.join(df.loc[idx, 'Text'].split()[:6]) + ('...' if len(df.loc[idx, 'Text'].split()) > 6 else '')
+                                    extremes.append({
+                                        'PCA1': float(df.loc[idx, 'PCA1']),
+                                        'PCA2': float(df.loc[idx, 'PCA2']),
+                                        'label': f"{label}: {text_excerpt}"
+                                    })
+                            for ex in extremes:
+                                fig.add_trace(go.Scatter(
+                                    x=[ex['PCA1']], y=[ex['PCA2']],
+                                    mode='markers+text',
+                                    marker=dict(size=10, color='black', symbol='diamond'),
+                                    text=[ex['label']],
+                                    textposition='top center',
+                                    showlegend=False
+                                ))
+                            st.plotly_chart(fig, use_container_width=True)
+                            explained_variance_str = ', '.join([f'{v:.2%}' for v in pca.explained_variance_ratio_])
+                            st.write(f"PCA explained variance: {explained_variance_str}")
+                            from viz.pca_summary import generate_narrative_summary
+                            summary = generate_narrative_summary(reduced, session_ids, token_ids, meta_slice)
+                            st.subheader("Narrative Summary")
+                            st.info(summary)
+                            # Store PCA results in session state for use in clinical tab
+                            st.session_state.pca_results = {
+                                'reduced': reduced,
+                                'session_ids': session_ids,
+                                'token_ids': token_ids,
+                                'meta': meta_slice
+                            }
+                        except Exception as e:
+                            st.error(f"PCA failed: {e}")
+                            explained_variance_str = "N/A"
+                            summary = "PCA analysis failed"
+                    else:
+                        st.warning("Need ≥2 sessions for PCA analysis.")
+                        explained_variance_str = "N/A"
+                        summary = "Insufficient data for PCA analysis"
+                    render_chat_analysis_panel(context={'explained_variance': explained_variance_str, 'narrative_summary': summary}, tab_id="pca2d")
+                elif i == 2:
+                    st.header("3D PCA Map")
+                    explained_variance_str = ""
+                    if len(st.session_state.memory) > 1:
+                        max_session = len(st.session_state.memory)
+                        if 'pca3d_played' not in st.session_state or not st.session_state.pca3d_played:
+                            st.session_state.pca3d_played = True
+                            for j in range(2, max_session + 1):
+                                st.session_state['timeline3d'] = j
+                                time.sleep(0.08)
+                                st.rerun()
+                        timeline_idx = st.slider(
+                            "Timeline: Show up to session",
+                            2, max_session,
+                            st.session_state.get('timeline3d', max_session),
+                            1,
+                            key="timeline3d"
+                        )
+                        memory_slice = st.session_state.memory[:timeline_idx]
+                        meta_slice = st.session_state.meta[:timeline_idx]
+                        from viz.pca_plot import prepare_for_pca
+                        import warnings
+                        import traceback
+                        try:
+                            flat, session_ids, token_ids = prepare_for_pca(memory_slice)
+                            # Robust data validation
+                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
+                                st.error("Data contains NaN, Inf, or extremely large values. Please check your input data.")
+                                return
+                            flat = (flat - np.mean(flat, axis=0)) / np.std(flat, axis=0)
+                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
+                                st.error("Data contains NaN, Inf, or extremely large values after normalization. Please check your input data.")
+                                return
+                            from sklearn.decomposition import PCA
+                            pca = PCA(n_components=3)
+                            reduced = pca.fit_transform(flat)
+                            # Create DataFrame for plotting
+                            df = pd.DataFrame({
+                                'PCA1': reduced[:, 0],
+                                'PCA2': reduced[:, 1],
+                                'PCA3': reduced[:, 2],
+                                'Session': [f"Session {j+1}" for j in session_ids],
+                                'SessionIdx': session_ids,
+                                'Text': [meta_slice[j]['text'] for j in session_ids]
+                            })
+                            # Find axis extremes for feature labeling
+                            extremes = []
+                            for axis, col in enumerate(['PCA1', 'PCA2', 'PCA3']):
+                                max_idx = df[col].idxmax()
+                                min_idx = df[col].idxmin()
+                                for idx, label in zip([max_idx, min_idx], [f"{col} +", f"{col} -"]):
+                                    text_excerpt = ' '.join(df.loc[idx, 'Text'].split()[:6]) + ('...' if len(df.loc[idx, 'Text'].split()) > 6 else '')
+                                    extremes.append({
+                                        'PCA1': float(df.loc[idx, 'PCA1']),
+                                        'PCA2': float(df.loc[idx, 'PCA2']),
+                                        'PCA3': float(df.loc[idx, 'PCA3']),
+                                        'label': f"{label}: {text_excerpt}"
+                                    })
+                            fig = px.scatter_3d(
+                                df,
+                                x='PCA1',
+                                y='PCA2',
+                                z='PCA3',
+                                color='SessionIdx',
+                                color_continuous_scale='RdYlBu',
+                                range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
+                                hover_data=['Session', 'Text'],
+                                title="3D Semantic Drift Map"
+                            )
+                            fig.update_traces(marker=dict(size=4, reversescale=True))
+                            fig.update_layout(
+                                scene = dict(
+                                    xaxis_title='<b>PCA-1</b><br><span style="font-size:12px; color:gray">Semantic Dimension 1</span>',
+                                    yaxis_title='<b>PCA-2</b><br><span style="font-size:12px; color:gray">Semantic Dimension 2</span>',
+                                    zaxis_title='<b>PCA-3</b><br><span style="font-size:12px; color:gray">Semantic Dimension 3</span>',
+                                ),
+                                coloraxis_colorbar=dict(title="Session"),
+                                margin=dict(l=0, r=0, b=0, t=40)
+                            )
+                            # Add feature labels at axis extremes
+                            for ex in extremes:
+                                fig.add_trace(go.Scatter3d(
+                                    x=[ex['PCA1']], y=[ex['PCA2']], z=[ex['PCA3']],
+                                    mode='markers+text',
+                                    marker=dict(size=10, color='black', symbol='diamond'),
+                                    text=[ex['label']],
+                                    textposition='top center',
+                                    showlegend=False
+                                ))
+                            st.plotly_chart(fig, use_container_width=True)
+                            explained_variance_str = ', '.join([f'{v:.2%}' for v in pca.explained_variance_ratio_])
+                            st.write(f"PCA explained variance: {explained_variance_str}")
+                        except Exception as e:
+                            st.error(f"3D PCA failed: {e}")
+                            explained_variance_str = "N/A"
+                    else:
+                        st.warning("Need ≥2 sessions for 3D PCA analysis.")
+                        explained_variance_str = "N/A"
+                    render_chat_analysis_panel(context={'explained_variance': explained_variance_str}, tab_id="pca3d")
+                elif i == 3:
+                    st.header("Session Heatmap")
+                    if len(st.session_state.memory) > 1:
+                        fig = plot_heatmap_plotly(st.session_state.memory)
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Need ≥2 sessions for heatmap analysis.")
+                    render_chat_analysis_panel(context={'notable_distances': "No notable distances found"}, tab_id="heatmap")
+                elif i == 4:
+                    st.header("Token Trajectory (3D)")
+                    if len(st.session_state.memory) > 0:
+                        session_idx = st.selectbox(
+                            "Select session to visualize:",
+                            options=list(range(len(st.session_state.memory))),
+                            format_func=lambda j: f"Session {j+1}"
+                        )
+                        tensor = st.session_state.memory[session_idx]
+                        embeddings = tensor.numpy()
+                        session_text = st.session_state.meta[session_idx]['text'] if 'text' in st.session_state.meta[session_idx] else ''
+                        if embeddings.shape[0] < 2:
+                            st.warning("Session has fewer than 2 tokens; cannot plot trajectory.")
+                        else:
+                            # Robust data validation
+                            if np.isnan(embeddings).any() or np.isinf(embeddings).any() or np.abs(embeddings).max() > 1e6:
+                                st.error("Token embeddings contain NaN, Inf, or extremely large values. Cannot plot trajectory.")
+                            else:
+                                tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+                                tokens = tokenizer.tokenize(session_text)
+                                if len(tokens) > embeddings.shape[0]:
+                                    tokens = tokens[:embeddings.shape[0]]
+                                elif len(tokens) < embeddings.shape[0]:
+                                    tokens += [''] * (embeddings.shape[0] - len(tokens))
+                                from sklearn.decomposition import PCA
+                                pca = PCA(n_components=3)
+                                embeddings_3d = pca.fit_transform(embeddings)
+                                # Compute drift between consecutive tokens in 3D
+                                drift = np.linalg.norm(np.diff(embeddings_3d, axis=0), axis=1)
+                                drift = np.insert(drift, 0, 0)  # First token has no previous
+                                # Highlight tokens with high drift (mean + std)
+                                high_drift = drift > (drift.mean() + drift.std())
+                                colors = np.where(high_drift, 'red', 'blue')
+                                hover_text = [f"{tok}<br>Drift: {d:.3f}" for tok, d in zip(tokens, drift)]
+                                fig = go.Figure(data=[go.Scatter3d(
+                                    x=embeddings_3d[:,0],
+                                    y=embeddings_3d[:,1],
+                                    z=embeddings_3d[:,2],
+                                    mode='lines+markers',
+                                    marker=dict(size=6, color=colors, opacity=0.8),
+                                    line=dict(width=2),
+                                    text=hover_text,
+                                    hoverinfo='text'
+                                )])
+                                fig.update_layout(
+                                    title=f'Token Trajectory in 3D Embedding Space (Session {session_idx+1})',
+                                    scene = dict(
+                                        xaxis_title='PCA-1',
+                                        yaxis_title='PCA-2',
+                                        zaxis_title='PCA-3',
+                                    ),
+                                    margin=dict(l=0, r=0, b=0, t=40)
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No sessions available to visualize.")
+                    render_chat_analysis_panel(context={'high_drift_tokens': "No high-drift tokens found"}, tab_id="trajectory")
+                elif i == 5:
+                    st.header("Clinical Analysis & Chat")
+                    render_chat_analysis_panel(tab_id="clinical")
     else:
         st.info("No sessions available. Add some sessions using the sidebar input or import a CSV file.")
 
