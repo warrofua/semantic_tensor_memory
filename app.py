@@ -165,6 +165,11 @@ def render_chat_analysis_panel(context=None, tab_id=None):
     streaming_key = f'streaming_{tab_id}' if tab_id else 'streaming'
     is_streaming = st.session_state.get(streaming_key, False)
     
+    # Display existing chat history first (before new streaming)
+    for role, msg in chat_history:
+        with st.chat_message(role):
+            st.markdown(msg)
+    
     # Show buttons
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -235,11 +240,6 @@ def render_chat_analysis_panel(context=None, tab_id=None):
             st.session_state[chat_key].append(("assistant", streamed))
             add_chat_message("assistant", streamed)
             st.session_state[streaming_key] = False
-    
-    # Display chat history
-    for role, msg in chat_history:
-        with st.chat_message(role):
-            st.markdown(msg)
     
     # User input
     user_input = st.chat_input("Ask a follow-up about the analysis or data...", key=f"chat_input_{chat_key}")
@@ -465,6 +465,7 @@ def main():
                 elif i == 2:
                     st.header("3D PCA Map")
                     explained_variance_str = ""
+                    summary = ""
                     if len(st.session_state.memory) > 1:
                         max_session = len(st.session_state.memory)
                         if 'pca3d_played' not in st.session_state or not st.session_state.pca3d_played:
@@ -554,13 +555,19 @@ def main():
                             st.plotly_chart(fig, use_container_width=True)
                             explained_variance_str = ', '.join([f'{v:.2%}' for v in pca.explained_variance_ratio_])
                             st.write(f"PCA explained variance: {explained_variance_str}")
+                            from viz.pca_summary import generate_narrative_summary
+                            summary = generate_narrative_summary(reduced, session_ids, token_ids, meta_slice)
+                            st.subheader("Narrative Summary")
+                            st.info(summary)
                         except Exception as e:
                             st.error(f"3D PCA failed: {e}")
                             explained_variance_str = "N/A"
+                            summary = "3D PCA analysis failed"
                     else:
                         st.warning("Need ≥2 sessions for 3D PCA analysis.")
                         explained_variance_str = "N/A"
-                    render_chat_analysis_panel(context={'explained_variance': explained_variance_str}, tab_id="pca3d")
+                        summary = "Insufficient data for 3D PCA analysis"
+                    render_chat_analysis_panel(context={'explained_variance': explained_variance_str, 'narrative_summary': summary}, tab_id="pca3d")
                 elif i == 3:
                     st.header("Session Heatmap")
                     if len(st.session_state.memory) > 1:
