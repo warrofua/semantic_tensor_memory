@@ -1,643 +1,990 @@
+"""
+Semantic Tensor Memory Analysis Application
+
+A clean, intuitive Streamlit application for analyzing semantic evolution in text data.
+Redesigned for optimal user experience and workflow.
+"""
+
 import streamlit as st
-import time, torch
-import plotly.graph_objects as go
-import plotly.express as px
+import time
 import pandas as pd
-import numpy as np
-from memory.embedder import embed_sentence
-from memory.store import load, append, save
-from memory.drift import drift_series, token_drift
+import csv
+import io
 import os
-import requests
-from transformers import AutoTokenizer
-from plotly.subplots import make_subplots
+import warnings
+import numpy as np
+
+# Fix PyTorch/Streamlit compatibility issues
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
+
+# Set environment variables to prevent PyTorch/Streamlit conflicts
+os.environ['TORCH_USE_CUDA_DSA'] = '0'
+os.environ['TORCH_DISABLE_WARN'] = '1'
+
+# Prevent PyTorch from interfering with Streamlit's file watcher
+try:
+    import torch
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
+    if hasattr(torch, '_C') and hasattr(torch._C, '_disable_jit_profiling'):
+        torch._C._disable_jit_profiling()
+except Exception:
+    pass
+
+# Import our modules
+from memory.embedder import embed_sentence
+from memory.store import save, append
+from memory.drift import drift_series
+from streamlit_utils import initialize_session_state, robust_pca_pipeline
+from streamlit_plots import (
+    plot_drift_plotly, 
+    plot_heatmap_plotly, 
+    create_pca_visualization,
+    create_animated_pca_trajectory,
+    create_temporal_heatmap,
+    create_variance_evolution_animation,
+    plot_ridgeline_plotly,
+    plot_enhanced_ridgeline_altair,
+    plot_ridgeline_altair,
+    create_pca_timeline_animation,
+    create_4d_semantic_space_visualization,
+    create_liminal_tunnel_visualization
+)
+from viz.semantic_drift_river import render_semantic_drift_river_analysis
+from viz.holistic_semantic_analysis import render_holistic_semantic_analysis
+from chat_analysis import render_comprehensive_chat_analysis
+from semantic_trajectory import (
+    calculate_semantic_trajectory_data,
+    create_3d_trajectory_plot,
+    display_trajectory_analysis_table
+)
+from alternative_dimensionality import compare_dimensionality_methods, create_alternative_visualization
+from viz.pca_summary import generate_narrative_summary
 
 # Set page config
 st.set_page_config(
     page_title="Semantic Tensor Memory",
-    page_icon="semantic_tensor_art_logo.png",
-    layout="wide"
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 # Initialize session state
-if 'memory' not in st.session_state:
-    st.session_state.memory, st.session_state.meta = load()
+initialize_session_state()
 
-# Initialize chat STM in session state
-if 'chat_memory' not in st.session_state:
-    st.session_state.chat_memory = []
-    st.session_state.chat_meta = []
 
-def add_chat_message(role, text):
-    emb = embed_sentence(text)
-    meta_row = {
-        "ts": time.time(),
-        "role": role,
-        "text": text,
-        "tokens": emb.shape[0]
-    }
-    st.session_state.chat_memory.append(emb)
-    st.session_state.chat_meta.append(meta_row)
-
-def plot_drift_plotly(drifts, token_counts):
-    """Create interactive drift plot using Plotly with secondary y-axis."""
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    # Add drift scores (line, left y-axis)
-    fig.add_trace(
-        go.Scatter(
-            x=list(range(len(drifts))),
-            y=drifts,
-            name="Drift Score",
-            line=dict(color='blue')
-        ),
-        secondary_y=False,
-    )
-    # Add token counts (bar, right y-axis)
-    fig.add_trace(
-        go.Bar(
-            x=list(range(len(token_counts))),
-            y=token_counts,
-            name="Token Count",
-            opacity=0.3,
-            marker_color='gray'
-        ),
-        secondary_y=True,
-    )
-    # Update layout
-    fig.update_layout(
-        title="Session Drift Analysis",
-        xaxis_title="Session",
-        hovermode="x unified",
-        showlegend=True
-    )
-    fig.update_yaxes(title_text="Drift Score", secondary_y=False)
-    fig.update_yaxes(title_text="Token Count", secondary_y=True)
-    return fig
-
-def plot_pca_plotly(reduced, session_ids, meta):
-    """Create interactive PCA plot using Plotly with a cool-to-warm color scale."""
-    # Create DataFrame for plotting
-    df = pd.DataFrame({
-        'PCA1': reduced[:, 0],
-        'PCA2': reduced[:, 1],
-        'Session': [f"Session {i+1}" for i in session_ids],
-        'Text': [meta[i]['text'] for i in session_ids]
-    })
-    
-    # Assign a numeric session index for color mapping
-    df['SessionIdx'] = session_ids
-    
-    # Create scatter plot with cool-to-warm color scale
-    fig = px.scatter(
-        df,
-        x='PCA1',
-        y='PCA2',
-        color='SessionIdx',
-        color_continuous_scale='RdYlBu',  # Cool-to-warm color scale
-        range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
-        hover_data=['Session', 'Text'],
-        title="Semantic Drift Map"
-    )
-    
-    # Reverse the color scale so early sessions are blue, later are red
-    fig.update_traces(marker=dict(reversescale=True))
-    fig.update_layout(
-        hovermode="closest",
-        showlegend=False,
-        coloraxis_colorbar=dict(title="Session")
-    )
-    
-    return fig
-
-def plot_heatmap_plotly(tensors):
-    """Create interactive heatmap using Plotly with a cool-to-warm color scale."""
-    # Compute session means
-    means = torch.stack([t.mean(0) for t in tensors])
-    
-    # Compute cosine similarity matrix
-    means_norm = torch.nn.functional.normalize(means, p=2, dim=1)
-    sims = torch.mm(means_norm, means_norm.t())
-    dist = 1 - sims.numpy()
-    
-    # Get token counts for annotation
-    token_counts = [t.shape[0] for t in tensors]
-    
-    # Create heatmap with a cool-to-warm color scale
-    fig = go.Figure(data=go.Heatmap(
-        z=dist,
-        colorscale='RdYlBu',  # Cool-to-warm color scale
-        reversescale=True,    # So low values are blue, high values are red
-        text=[[f"{count}" for count in token_counts] for _ in range(len(token_counts))],
-        texttemplate="%{text}",
-        textfont={"size": 10},
-        colorbar=dict(title="Cosine distance")
-    ))
-    
-    # Update layout
-    fig.update_layout(
-        title="Session-to-Session Semantic Drift",
-        xaxis_title="Session",
-        yaxis_title="Session"
-    )
-    
-    return fig
-
-def is_ollama_model_available(model_name):
+def handle_csv_import(uploaded_file):
+    """Handle CSV file upload and import with clean feedback."""
     try:
-        resp = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if resp.status_code == 200:
-            tags = resp.json().get("models", [])
-            return any(model_name in m.get("name", "") for m in tags)
-    except Exception:
-        pass
-    return False
-
-def render_chat_analysis_panel(context=None, tab_id=None):
-    selected_model = st.session_state["selected_model"]
-    chat_key = f"chat_history_{tab_id}" if tab_id else "chat_history"
-    
-    if chat_key not in st.session_state:
-        st.session_state[chat_key] = []
-    
-    chat_history = st.session_state[chat_key]
-    
-    # Check for streaming state
-    streaming_key = f'streaming_{tab_id}' if tab_id else 'streaming'
-    is_streaming = st.session_state.get(streaming_key, False)
-    
-    # Display existing chat history first (before new streaming)
-    for role, msg in chat_history:
-        with st.chat_message(role):
-            st.markdown(msg)
-    
-    # Show buttons
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        explain_clicked = st.button("Explain", key=f"explain_btn_{tab_id}", disabled=is_streaming)
-    
-    with col2:
-        if is_streaming:
-            pause_clicked = st.button("Pause", key=f"pause_btn_{tab_id}")
-            if pause_clicked:
-                st.session_state[streaming_key] = False
-                st.rerun()
-    
-    # Handle Explain button click
-    if explain_clicked:
-        st.session_state[streaming_key] = True
-        
-        if not is_ollama_model_available(selected_model):
-            st.warning(
-                f"The model '{selected_model}' is not available in your local Ollama. "
-                f"To download it, run this command in your terminal:\n\n"
-                f"```sh\nollama pull {selected_model}\n```"
-            )
-            st.session_state[streaming_key] = False
-            return
-        
-        # Create prompt based on context
-        if context:
-            prompt_parts = ["Analyze this semantic tensor memory data:"]
-            for key, value in context.items():
-                prompt_parts.append(f"{key}: {value}")
-            prompt_parts.append("\nPlease provide actionable recommendations for next steps or interventions.")
-            prompt = "\n".join(prompt_parts)
-        else:
-            prompt = "Please analyze the current semantic tensor memory data and provide actionable recommendations."
-        
-        def stream_ollama_response(prompt_text):
-            url = "http://localhost:11434/api/generate"
-            payload = {
-                "model": selected_model,
-                "prompt": prompt_text,
-                "stream": True
-            }
-            try:
-                with requests.post(url, json=payload, stream=True, timeout=180) as r:
-                    for line in r.iter_lines():
-                        if not st.session_state.get(streaming_key, False):
-                            break
-                        if line:
-                            try:
-                                import json as _json
-                                data = _json.loads(line.decode("utf-8"))
-                                yield data.get("response", "")
-                            except Exception:
-                                continue
-            except Exception as e:
-                yield f"Error connecting to Ollama: {e}"
-        
-        with st.chat_message("assistant"):
-            placeholder = st.empty()
-            streamed = ""
-            for token in stream_ollama_response(prompt):
-                if not st.session_state.get(streaming_key, False):
-                    break
-                streamed += token
-                placeholder.markdown(streamed)
-            
-            # Finalize the response
-            st.session_state[chat_key].append(("assistant", streamed))
-            add_chat_message("assistant", streamed)
-            st.session_state[streaming_key] = False
-    
-    # User input
-    user_input = st.chat_input("Ask a follow-up about the analysis or data...", key=f"chat_input_{chat_key}")
-    if user_input and not is_streaming:
-        st.session_state[chat_key].append(("user", user_input))
-        add_chat_message("user", user_input)
-        st.rerun()
-
-def main():
-    # Prevent rerun loop after CSV import
-    if st.session_state.get("csv_imported", False):
-        st.session_state["csv_imported"] = False
-        st.stop()
-    # Adjust the layout to move it down by about 1/4 inch
-    st.markdown(
-        """
-        <style>
-        .block-container {
-            padding-top: 1.5rem !important;
-            margin-top: 0rem !important;
-        }
-        html, body {
-            padding-top: 0 !important;
-            margin-top: 0 !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-    st.sidebar.image("semantic_tensor_art_logo.png", width=285)
-    st.title("Semantic Tensor Memory Analysis")
-
-    # Model selection dropdown (shared globally, only once)
-    model_options = {
-        "Qwen3 (Ollama)": "qwen3:latest",
-        "Mistral (Ollama)": "mistral:latest"
-    }
-    selected_model_label = st.selectbox(
-        "Choose LLM model for analysis:",
-        list(model_options.keys()),
-        key="behavior_model_global"
-    )
-    selected_model = model_options[selected_model_label]
-    st.session_state["selected_model_label"] = selected_model_label
-    st.session_state["selected_model"] = selected_model
-
-    # Sidebar for input
-    st.sidebar.header("Input")
-    input_text = st.sidebar.text_area("Enter new session text:", height=150)
-    
-    if st.sidebar.button("Add Session"):
-        if input_text.strip():
-            emb = embed_sentence(input_text)
-            meta_row = {
-                "ts": time.time(),
-                "text": input_text,
-                "tokens": emb.shape[0]
-            }
-            st.session_state.memory, st.session_state.meta = append(
-                st.session_state.memory, emb, st.session_state.meta, meta_row
-            )
-            st.sidebar.success(f"Stored session {len(st.session_state.meta)} with {emb.shape[0]} tokens.")
-            st.rerun()
-        else:
-            st.sidebar.warning("Please enter some text.")
-    
-    # File uploader for CSV
-    uploaded_file = st.sidebar.file_uploader("Import sessions from CSV", type=['csv'], key="uploaded_file")
-    if uploaded_file is not None:
-        import csv
-        import io
         memory = []
         meta = []
         csv_data = uploaded_file.read().decode('utf-8')
         reader = csv.DictReader(io.StringIO(csv_data))
-        for row in reader:
+        
+        # Process with progress
+        rows = list(reader)
+        if not rows:
+            st.error("❌ The CSV file appears to be empty")
+            return False
+            
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        valid_sessions = 0
+        for i, row in enumerate(rows):
+            progress_bar.progress((i + 1) / len(rows))
+            status_text.text(f"Processing row {i + 1} of {len(rows)}...")
+            
             text = row.get('text', '').strip()
-            if not text:
-                continue
-            emb = embed_sentence(text)
-            meta_row = dict(row)
-            meta_row['tokens'] = emb.shape[0]
-            memory.append(emb)
-            meta.append(meta_row)
+            if text:
+                try:
+                    emb = embed_sentence(text)
+                    meta_row = dict(row)
+                    meta_row['tokens'] = emb.shape[0]
+                    memory.append(emb)
+                    meta.append(meta_row)
+                    valid_sessions += 1
+                except Exception:
+                    continue  # Skip problematic rows silently
+        
+        progress_bar.empty()
+        status_text.empty()
+        
         if memory:
+            # Update session state
             st.session_state.memory = memory
             st.session_state.meta = meta
+            
+            # Update dataset info
+            st.session_state.dataset_info = {
+                'source': 'csv_import',
+                'filename': uploaded_file.name,
+                'upload_timestamp': time.time(),
+                'session_count': len(memory),
+                'total_tokens': sum(m.shape[0] for m in memory)
+            }
+            
+            # Save the data
             save(memory, meta)
-            st.sidebar.success(f"Imported and saved {len(memory)} sessions.")
-            st.session_state["csv_imported"] = True
-            st.rerun()
+            
+            st.success(f"✅ Successfully loaded **{uploaded_file.name}** with {len(memory)} sessions")
+            return True
+        else:
+            st.error(f"❌ No valid text data found in {uploaded_file.name}")
+            return False
+        
+    except Exception as e:
+        st.error(f"❌ Failed to process {uploaded_file.name}: {str(e)}")
+        return False
+
+
+def render_upload_screen():
+    """Render the clean upload interface for new users."""
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem 0;">
+        <h1>🧠 Semantic Tensor Memory</h1>
+        <h3 style="color: #666;">Analyze how meaning evolves across text sessions</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Main content area
-    if len(st.session_state.memory) > 0:
-        # Create tabs for different visualizations
-        tab_names = ["Drift Analysis", "PCA Map", "3D PCA Map", "Heatmap", "Token Trajectory (3D)", "Clinical Analysis & Chat"]
-        tab_objects = st.tabs(tab_names)
-        for i, tab in enumerate(tab_objects):
-            with tab:
-                if i == 0:
-                    st.header("Drift Analysis")
-                    if len(st.session_state.memory) > 1:
-                        drifts, counts = drift_series(st.session_state.memory)
-                        fig = plot_drift_plotly(drifts, counts)
-                        st.plotly_chart(fig, use_container_width=True)
-                        drift_data = []
-                        for j, (d, c) in enumerate(zip(drifts, counts)):
-                            drift_data.append({
-                                "Session": f"{j+1} → {j+2}",
-                                "Drift Score": f"{d:.3f}",
-                                "Token Count": c
-                            })
-                        st.table(pd.DataFrame(drift_data))
-                        render_chat_analysis_panel(context={'drifts': drifts[:5], 'drifts_full': drifts}, tab_id="drift")
-                    else:
-                        st.warning("Need ≥2 sessions to plot drift.")
-                        render_chat_analysis_panel(context={'drifts': [], 'drifts_full': []}, tab_id="drift")
-                elif i == 1:
-                    st.header("PCA Map")
-                    explained_variance_str = ""
-                    summary = ""
-                    if len(st.session_state.memory) > 1:
-                        max_session = len(st.session_state.memory)
-                        if 'pca2d_played' not in st.session_state or not st.session_state.pca2d_played:
-                            st.session_state.pca2d_played = True
-                            for j in range(2, max_session + 1):
-                                st.session_state['timeline2d'] = j
-                                time.sleep(0.08)
-                                st.rerun()
-                        timeline_idx = st.slider(
-                            "Timeline: Show up to session",
-                            2, max_session,
-                            st.session_state.get('timeline2d', max_session),
-                            1,
-                            key="timeline2d"
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("### 📁 Upload Your Data")
+        st.markdown("Upload a CSV file with a **'text'** column containing your sessions, documents, or journal entries.")
+        
+        uploaded_file = st.file_uploader(
+            "Choose CSV file",
+            type=['csv'],
+            help="CSV should have a 'text' column with your text data"
+        )
+        
+        if uploaded_file is not None:
+            if handle_csv_import(uploaded_file):
+                st.rerun()
+
+        st.markdown("---")
+        
+        # Example datasets
+        st.markdown("### 🎯 Try Example Datasets")
+        
+        if st.button("📚 Load Demo Dataset", type="primary"):
+            # Check if demo dataset exists
+            if os.path.exists("demo_dataset.csv"):
+                with open("demo_dataset.csv", "rb") as f:
+                    if handle_csv_import(type('MockFile', (), {
+                        'name': 'demo_dataset.csv',
+                        'read': lambda: f.read()
+                    })()):
+                        st.rerun()
+            else:
+                st.error("Demo dataset not found. Please upload your own CSV file.")
+        
+        st.markdown("""
+        <div style="background: #f0f2f6; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
+        <strong>💡 What can you analyze?</strong>
+        <ul>
+        <li>📝 Journal entries over time</li>
+        <li>📚 Document evolution in a project</li>
+        <li>💬 Chat conversations or interviews</li>
+        <li>📊 Survey responses across periods</li>
+        <li>🎓 Learning journey documentation</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def render_simple_sidebar():
+    """Render a clean, minimal sidebar."""
+    with st.sidebar:
+        st.image("semantic_tensor_art_logo.png", width=200)
+        
+        # Dataset status (compact)
+        dataset_info = st.session_state.get('dataset_info', {})
+        if dataset_info.get('session_count', 0) > 0:
+            filename = dataset_info.get('filename', 'Unknown')
+            session_count = dataset_info.get('session_count', 0)
+            st.markdown(f"**📁 {filename}**")
+            st.markdown(f"🔢 {session_count} sessions")
+            
+            # Quick actions
+            if st.button("🔄 New Dataset"):
+                st.session_state.memory = []
+                st.session_state.meta = []
+                st.session_state.dataset_info = {'session_count': 0}
+                st.rerun()
+        else:
+            st.markdown("**No dataset loaded**")
+        
+        st.markdown("---")
+        
+        # Show preferred dimensionality method
+        preferred_method = st.session_state.get('preferred_method')
+        if preferred_method:
+            st.markdown("---")
+            st.markdown("**📐 Preferred Method:**")
+            st.markdown(f"🎯 {preferred_method.upper()}")
+            st.caption("Set in Dimensionality tab")
+
+
+def render_overview_dashboard():
+    """Render the main overview dashboard with key insights."""
+    dataset_info = st.session_state.get('dataset_info', {})
+    filename = dataset_info.get('filename', 'Unknown Dataset')
+    session_count = dataset_info.get('session_count', 0)
+    
+    # Header
+    st.markdown(f"# 🧠 {filename}")
+    
+    # Key metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📊 Sessions", session_count)
+    
+    with col2:
+        total_tokens = dataset_info.get('total_tokens', 0)
+        st.metric("🔤 Total Tokens", f"{total_tokens:,}")
+    
+    with col3:
+        avg_tokens = total_tokens / max(session_count, 1)
+        st.metric("📏 Avg Length", f"{avg_tokens:.0f}")
+    
+    with col4:
+        # Quick semantic shift calculation
+        if len(st.session_state.memory) > 1:
+            try:
+                drifts, _ = drift_series(st.session_state.memory)
+                avg_drift = np.mean(drifts)
+                st.metric("🌊 Avg Drift", f"{avg_drift:.3f}")
+            except:
+                st.metric("🌊 Avg Drift", "N/A")
+        else:
+            st.metric("🌊 Avg Drift", "N/A")
+    
+    st.markdown("---")
+    
+    # Main visualizations (2 columns)
+    if len(st.session_state.memory) > 1:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📈 Semantic Evolution")
+            try:
+                drifts, counts = drift_series(st.session_state.memory)
+                fig = plot_drift_plotly(drifts, counts)
+                st.plotly_chart(fig, use_container_width=True, key="overview_drift_plot")
+            except Exception as e:
+                st.error(f"Could not generate drift plot: {e}")
+        
+        with col2:
+            st.subheader("🗺️ Semantic Space")
+            try:
+                # Check if user has a preferred method from comparison
+                if 'preferred_method' in st.session_state and 'method_results' in st.session_state:
+                    preferred_method = st.session_state['preferred_method']
+                    method_results = st.session_state['method_results']
+                    
+                    if preferred_method == 'umap' and method_results.get('umap_results'):
+                        fig = create_alternative_visualization(
+                            method_results['umap_results'], 
+                            st.session_state.meta, 
+                            "UMAP"
                         )
-                        memory_slice = st.session_state.memory[:timeline_idx]
-                        meta_slice = st.session_state.meta[:timeline_idx]
-                        from viz.pca_plot import prepare_for_pca
-                        import warnings
-                        import traceback
-                        try:
-                            flat, session_ids, token_ids = prepare_for_pca(memory_slice)
-                            # Robust data validation
-                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                                st.error("Data contains NaN, Inf, or extremely large values. Please check your input data.")
-                                return
-                            flat = (flat - np.mean(flat, axis=0)) / np.std(flat, axis=0)
-                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                                st.error("Data contains NaN, Inf, or extremely large values after normalization. Please check your input data.")
-                                return
-                            from sklearn.decomposition import PCA
-                            pca = PCA(n_components=2)
-                            reduced = pca.fit_transform(flat)
-                            # Create DataFrame for plotting
-                            df = pd.DataFrame({
-                                'PCA1': reduced[:, 0],
-                                'PCA2': reduced[:, 1],
-                                'Session': [f"Session {j+1}" for j in session_ids],
-                                'SessionIdx': session_ids,
-                                'Text': [meta_slice[j]['text'] for j in session_ids]
-                            })
-                            fig = px.scatter(
-                                df,
-                                x='PCA1',
-                                y='PCA2',
-                                color='SessionIdx',
-                                color_continuous_scale='RdYlBu',
-                                range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
-                                hover_data=['Session', 'Text'],
-                                title="Semantic Drift Map"
-                            )
-                            fig.update_traces(marker=dict(reversescale=True))
-                            fig.update_layout(
-                                hovermode="closest",
-                                showlegend=False,
-                                coloraxis_colorbar=dict(title="Session")
-                            )
-                            # Feature labels for 2D
-                            extremes = []
-                            for axis, col in enumerate(['PCA1', 'PCA2']):
-                                max_idx = df[col].idxmax()
-                                min_idx = df[col].idxmin()
-                                for idx, label in zip([max_idx, min_idx], [f"{col} +", f"{col} -"]):
-                                    text_excerpt = ' '.join(df.loc[idx, 'Text'].split()[:6]) + ('...' if len(df.loc[idx, 'Text'].split()) > 6 else '')
-                                    extremes.append({
-                                        'PCA1': float(df.loc[idx, 'PCA1']),
-                                        'PCA2': float(df.loc[idx, 'PCA2']),
-                                        'label': f"{label}: {text_excerpt}"
-                                    })
-                            for ex in extremes:
-                                fig.add_trace(go.Scatter(
-                                    x=[ex['PCA1']], y=[ex['PCA2']],
-                                    mode='markers+text',
-                                    marker=dict(size=10, color='black', symbol='diamond'),
-                                    text=[ex['label']],
-                                    textposition='top center',
-                                    showlegend=False
-                                ))
-                            st.plotly_chart(fig, use_container_width=True)
-                            explained_variance_str = ', '.join([f'{v:.2%}' for v in pca.explained_variance_ratio_])
-                            st.write(f"PCA explained variance: {explained_variance_str}")
-                            from viz.pca_summary import generate_narrative_summary
-                            summary = generate_narrative_summary(reduced, session_ids, token_ids, meta_slice)
-                            st.subheader("Narrative Summary")
-                            st.info(summary)
-                            # Store PCA results in session state for use in clinical tab
-                            st.session_state.pca_results = {
-                                'reduced': reduced,
-                                'session_ids': session_ids,
-                                'token_ids': token_ids,
-                                'meta': meta_slice
-                            }
-                        except Exception as e:
-                            st.error(f"PCA failed: {e}")
-                            explained_variance_str = "N/A"
-                            summary = "PCA analysis failed"
-                    else:
-                        st.warning("Need ≥2 sessions for PCA analysis.")
-                        explained_variance_str = "N/A"
-                        summary = "Insufficient data for PCA analysis"
-                    render_chat_analysis_panel(context={'explained_variance': explained_variance_str, 'narrative_summary': summary}, tab_id="pca2d")
-                elif i == 2:
-                    st.header("3D PCA Map")
-                    explained_variance_str = ""
-                    summary = ""
-                    if len(st.session_state.memory) > 1:
-                        max_session = len(st.session_state.memory)
-                        if 'pca3d_played' not in st.session_state or not st.session_state.pca3d_played:
-                            st.session_state.pca3d_played = True
-                            for j in range(2, max_session + 1):
-                                st.session_state['timeline3d'] = j
-                                time.sleep(0.08)
-                                st.rerun()
-                        timeline_idx = st.slider(
-                            "Timeline: Show up to session",
-                            2, max_session,
-                            st.session_state.get('timeline3d', max_session),
-                            1,
-                            key="timeline3d"
-                        )
-                        memory_slice = st.session_state.memory[:timeline_idx]
-                        meta_slice = st.session_state.meta[:timeline_idx]
-                        from viz.pca_plot import prepare_for_pca
-                        import warnings
-                        import traceback
-                        try:
-                            flat, session_ids, token_ids = prepare_for_pca(memory_slice)
-                            # Robust data validation
-                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                                st.error("Data contains NaN, Inf, or extremely large values. Please check your input data.")
-                                return
-                            flat = (flat - np.mean(flat, axis=0)) / np.std(flat, axis=0)
-                            if np.isnan(flat).any() or np.isinf(flat).any() or np.abs(flat).max() > 1e6:
-                                st.error("Data contains NaN, Inf, or extremely large values after normalization. Please check your input data.")
-                                return
-                            from sklearn.decomposition import PCA
-                            pca = PCA(n_components=3)
-                            reduced = pca.fit_transform(flat)
-                            # Create DataFrame for plotting
-                            df = pd.DataFrame({
-                                'PCA1': reduced[:, 0],
-                                'PCA2': reduced[:, 1],
-                                'PCA3': reduced[:, 2],
-                                'Session': [f"Session {j+1}" for j in session_ids],
-                                'SessionIdx': session_ids,
-                                'Text': [meta_slice[j]['text'] for j in session_ids]
-                            })
-                            # Find axis extremes for feature labeling
-                            extremes = []
-                            for axis, col in enumerate(['PCA1', 'PCA2', 'PCA3']):
-                                max_idx = df[col].idxmax()
-                                min_idx = df[col].idxmin()
-                                for idx, label in zip([max_idx, min_idx], [f"{col} +", f"{col} -"]):
-                                    text_excerpt = ' '.join(df.loc[idx, 'Text'].split()[:6]) + ('...' if len(df.loc[idx, 'Text'].split()) > 6 else '')
-                                    extremes.append({
-                                        'PCA1': float(df.loc[idx, 'PCA1']),
-                                        'PCA2': float(df.loc[idx, 'PCA2']),
-                                        'PCA3': float(df.loc[idx, 'PCA3']),
-                                        'label': f"{label}: {text_excerpt}"
-                                    })
-                            fig = px.scatter_3d(
-                                df,
-                                x='PCA1',
-                                y='PCA2',
-                                z='PCA3',
-                                color='SessionIdx',
-                                color_continuous_scale='RdYlBu',
-                                range_color=[df['SessionIdx'].min(), df['SessionIdx'].max()],
-                                hover_data=['Session', 'Text'],
-                                title="3D Semantic Drift Map"
-                            )
-                            fig.update_traces(marker=dict(size=4, reversescale=True))
-                            fig.update_layout(
-                                scene = dict(
-                                    xaxis_title='<b>PCA-1</b><br><span style="font-size:12px; color:gray">Semantic Dimension 1</span>',
-                                    yaxis_title='<b>PCA-2</b><br><span style="font-size:12px; color:gray">Semantic Dimension 2</span>',
-                                    zaxis_title='<b>PCA-3</b><br><span style="font-size:12px; color:gray">Semantic Dimension 3</span>',
-                                ),
-                                coloraxis_colorbar=dict(title="Session"),
-                                margin=dict(l=0, r=0, b=0, t=40)
-                            )
-                            # Add feature labels at axis extremes
-                            for ex in extremes:
-                                fig.add_trace(go.Scatter3d(
-                                    x=[ex['PCA1']], y=[ex['PCA2']], z=[ex['PCA3']],
-                                    mode='markers+text',
-                                    marker=dict(size=10, color='black', symbol='diamond'),
-                                    text=[ex['label']],
-                                    textposition='top center',
-                                    showlegend=False
-                                ))
-                            st.plotly_chart(fig, use_container_width=True)
-                            explained_variance_str = ', '.join([f'{v:.2%}' for v in pca.explained_variance_ratio_])
-                            st.write(f"PCA explained variance: {explained_variance_str}")
-                            from viz.pca_summary import generate_narrative_summary
-                            summary = generate_narrative_summary(reduced, session_ids, token_ids, meta_slice)
-                            st.subheader("Narrative Summary")
-                            st.info(summary)
-                        except Exception as e:
-                            st.error(f"3D PCA failed: {e}")
-                            explained_variance_str = "N/A"
-                            summary = "3D PCA analysis failed"
-                    else:
-                        st.warning("Need ≥2 sessions for 3D PCA analysis.")
-                        explained_variance_str = "N/A"
-                        summary = "Insufficient data for 3D PCA analysis"
-                    render_chat_analysis_panel(context={'explained_variance': explained_variance_str, 'narrative_summary': summary}, tab_id="pca3d")
-                elif i == 3:
-                    st.header("Session Heatmap")
-                    if len(st.session_state.memory) > 1:
-                        fig = plot_heatmap_plotly(st.session_state.memory)
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.warning("Need ≥2 sessions for heatmap analysis.")
-                    render_chat_analysis_panel(context={'notable_distances': "No notable distances found"}, tab_id="heatmap")
-                elif i == 4:
-                    st.header("Token Trajectory (3D)")
-                    if len(st.session_state.memory) > 0:
-                        session_idx = st.selectbox(
-                            "Select session to visualize:",
-                            options=list(range(len(st.session_state.memory))),
-                            format_func=lambda j: f"Session {j+1}"
-                        )
-                        tensor = st.session_state.memory[session_idx]
-                        embeddings = tensor.numpy()
-                        session_text = st.session_state.meta[session_idx]['text'] if 'text' in st.session_state.meta[session_idx] else ''
-                        if embeddings.shape[0] < 2:
-                            st.warning("Session has fewer than 2 tokens; cannot plot trajectory.")
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True, key="overview_umap_plot")
+                            st.caption("🎯 Using UMAP (your preferred method)")
                         else:
-                            # Robust data validation
-                            if np.isnan(embeddings).any() or np.isinf(embeddings).any() or np.abs(embeddings).max() > 1e6:
-                                st.error("Token embeddings contain NaN, Inf, or extremely large values. Cannot plot trajectory.")
-                            else:
-                                tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-                                tokens = tokenizer.tokenize(session_text)
-                                if len(tokens) > embeddings.shape[0]:
-                                    tokens = tokens[:embeddings.shape[0]]
-                                elif len(tokens) < embeddings.shape[0]:
-                                    tokens += [''] * (embeddings.shape[0] - len(tokens))
-                                from sklearn.decomposition import PCA
-                                pca = PCA(n_components=3)
-                                embeddings_3d = pca.fit_transform(embeddings)
-                                # Compute drift between consecutive tokens in 3D
-                                drift = np.linalg.norm(np.diff(embeddings_3d, axis=0), axis=1)
-                                drift = np.insert(drift, 0, 0)  # First token has no previous
-                                # Highlight tokens with high drift (mean + std)
-                                high_drift = drift > (drift.mean() + drift.std())
-                                colors = np.where(high_drift, 'red', 'blue')
-                                hover_text = [f"{tok}<br>Drift: {d:.3f}" for tok, d in zip(tokens, drift)]
-                                fig = go.Figure(data=[go.Scatter3d(
-                                    x=embeddings_3d[:,0],
-                                    y=embeddings_3d[:,1],
-                                    z=embeddings_3d[:,2],
-                                    mode='lines+markers',
-                                    marker=dict(size=6, color=colors, opacity=0.8),
-                                    line=dict(width=2),
-                                    text=hover_text,
-                                    hoverinfo='text'
-                                )])
-                                fig.update_layout(
-                                    title=f'Token Trajectory in 3D Embedding Space (Session {session_idx+1})',
-                                    scene = dict(
-                                        xaxis_title='PCA-1',
-                                        yaxis_title='PCA-2',
-                                        zaxis_title='PCA-3',
-                                    ),
-                                    margin=dict(l=0, r=0, b=0, t=40)
-                                )
-                                st.plotly_chart(fig, use_container_width=True)
+                            # Fallback to PCA
+                            results = robust_pca_pipeline(
+                                st.session_state.memory, 
+                                st.session_state.meta, 
+                                n_components=2,
+                                method='auto'
+                            )
+                            if results:
+                                fig = create_pca_visualization(results, st.session_state.meta, is_3d=False)
+                                st.plotly_chart(fig, use_container_width=True, key="overview_pca_plot")
+                                st.caption("📊 Using PCA (fallback)")
                     else:
-                        st.info("No sessions available to visualize.")
-                    render_chat_analysis_panel(context={'high_drift_tokens': "No high-drift tokens found"}, tab_id="trajectory")
-                elif i == 5:
-                    st.header("Clinical Analysis & Chat")
-                    render_chat_analysis_panel(tab_id="clinical")
+                        # For t-SNE or other methods, fallback to PCA for now
+                        results = robust_pca_pipeline(
+                            st.session_state.memory, 
+                            st.session_state.meta, 
+                            n_components=2,
+                            method='auto'
+                        )
+                        if results:
+                            fig = create_pca_visualization(results, st.session_state.meta, is_3d=False)
+                            st.plotly_chart(fig, use_container_width=True, key="overview_pca_plot")
+                            st.caption(f"📊 Using PCA (preferred {preferred_method.upper()} not available in 2D overview)")
+                else:
+                    # Default PCA visualization
+                    results = robust_pca_pipeline(
+                        st.session_state.memory, 
+                        st.session_state.meta, 
+                        n_components=2,
+                        method='auto'
+                    )
+                    if results:
+                        fig = create_pca_visualization(results, st.session_state.meta, is_3d=False)
+                        st.plotly_chart(fig, use_container_width=True, key="overview_pca_plot")
+                        st.caption("📊 Using PCA (default)")
+                    else:
+                        st.error("Could not generate PCA visualization")
+            except Exception as e:
+                st.error(f"Could not generate plot: {e}")
+        
+        # Quick insights
+        st.subheader("🔍 Quick Insights")
+        try:
+            # Generate a quick narrative summary
+            if 'results' in locals() and results:
+                summary = generate_narrative_summary(
+                    results['reduced'], 
+                    results['session_ids'], 
+                    results['token_ids'], 
+                    st.session_state.meta
+                )
+                st.info(summary)
+            else:
+                st.info("💡 Your dataset is ready for analysis. Use the tabs above to explore semantic patterns, evolution, and get AI-powered insights.")
+        except:
+            st.info("💡 Your dataset is ready for analysis. Use the tabs above to explore semantic patterns, evolution, and get AI-powered insights.")
+    
     else:
-        st.info("No sessions available. Add some sessions using the sidebar input or import a CSV file.")
+        st.info("📊 Upload more sessions to see semantic evolution analysis.")
+
+
+def render_semantic_evolution_tab():
+    """Combined semantic evolution analysis (drift + trajectory)."""
+    st.header("🌊 Semantic Evolution")
+    
+    if len(st.session_state.memory) > 1:
+        # Evolution over time
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📈 Drift Analysis")
+            drifts, counts = drift_series(st.session_state.memory)
+            fig = plot_drift_plotly(drifts, counts)
+            st.plotly_chart(fig, use_container_width=True, key="evolution_drift_plot")
+        
+        with col2:
+            st.subheader("🎯 3D Trajectory")
+            trajectory_data = calculate_semantic_trajectory_data(
+                st.session_state.memory, 
+                st.session_state.meta
+            )
+            if trajectory_data:
+                fig = create_3d_trajectory_plot(trajectory_data)
+                st.plotly_chart(fig, use_container_width=True, key="evolution_3d_trajectory")
+        
+        # Detailed analysis table
+        st.subheader("📊 Session-by-Session Analysis")
+        if trajectory_data:
+            table_data = display_trajectory_analysis_table(trajectory_data)
+            st.dataframe(table_data, use_container_width=True)
+    
+    else:
+        st.warning("Need ≥2 sessions for evolution analysis.")
+
+
+def render_pattern_analysis_tab():
+    """Pattern discovery with multiple visualization techniques."""
+    st.header("🔍 Pattern Analysis")
+    
+    if len(st.session_state.memory) > 1:
+        # Analysis type selector
+        analysis_type = st.radio(
+            "Choose analysis type:",
+            ["🌐 Holistic Semantic Analysis (REVOLUTIONARY!)", "🌊 Semantic Drift River (3D)", "📊 Ridgeline (Feature Evolution)", "🔥 Similarity Heatmap", "🎬 Animated Patterns"],
+            horizontal=True
+        )
+        
+        if analysis_type.startswith("🌐"):
+            # Revolutionary Holistic Semantic Analysis
+            render_holistic_semantic_analysis(st.session_state.memory, st.session_state.meta)
+        
+        elif analysis_type.startswith("🌊"):
+            # 3D Semantic Drift River
+            render_semantic_drift_river_analysis(st.session_state.memory, st.session_state.meta)
+        
+        elif analysis_type.startswith("📊"):
+            # Enhanced ridgeline
+            result = plot_enhanced_ridgeline_altair(
+                st.session_state.memory, 
+                st.session_state.meta,
+                show_trends=True,
+                highlight_changes=True
+            )
+            
+            if result and len(result) == 2:
+                fig, scaling_info = result
+                if fig:
+                    st.altair_chart(fig, use_container_width=True)
+                    with st.expander("📈 Scaling Details"):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Features", scaling_info.get('features', 'N/A'))
+                        with col2:
+                            st.metric("Value Range", scaling_info.get('value_range', 'N/A'))
+                        with col3:
+                            st.metric("Chart Height", f"{scaling_info.get('adaptive_height', 'N/A')}px")
+        
+        elif analysis_type.startswith("🔥"):
+            # Heatmap
+            fig = plot_heatmap_plotly(st.session_state.memory)
+            st.plotly_chart(fig, use_container_width=True, key="pattern_heatmap")
+        
+        elif analysis_type.startswith("🎬"):
+            # Animated analysis
+            st.subheader("🎬 Animated Semantic Evolution")
+            
+            # Animation type selector
+            animation_type = st.radio(
+                "Choose animation type:",
+                ["🎯 Trajectory Evolution", "📈 PCA Over Time", "📊 Variance Build-up", "🌊 Liminal Tunnel", "🌌 4D Semantic Space"],
+                horizontal=True
+            )
+            
+            # Quick animation settings
+            col1, col2 = st.columns(2)
+            with col1:
+                speed = st.selectbox("Speed", [300, 500, 800], index=1)
+            with col2:
+                include_3d = st.checkbox("3D View", value=True)
+            
+            # Enhanced PCA for animation
+            results = robust_pca_pipeline(
+                st.session_state.memory, 
+                st.session_state.meta, 
+                n_components=3 if include_3d else 2,
+                method='auto'
+            )
+            
+            # Check if user has a preferred method and can use it
+            preferred_method = st.session_state.get('preferred_method')
+            if preferred_method:
+                st.info(f"🎯 Note: Your preferred method is {preferred_method.upper()}, but animations currently use PCA for temporal consistency.")
+            
+            if results:
+                if animation_type.startswith("🎯"):
+                    # Animated trajectory
+                    trajectory_fig = create_animated_pca_trajectory(results, st.session_state.meta, speed)
+                    if trajectory_fig:
+                        st.plotly_chart(trajectory_fig, use_container_width=True, key="pattern_animated_trajectory")
+                
+                elif animation_type.startswith("📈"):
+                    # PCA over time animation
+                    st.info("🎥 Watch how the PCA space evolves as sessions are progressively added")
+                    timeline_fig = create_pca_timeline_animation(
+                        st.session_state.memory,
+                        st.session_state.meta,
+                        animation_speed=speed,
+                        is_3d=include_3d
+                    )
+                    if timeline_fig:
+                        st.plotly_chart(timeline_fig, use_container_width=True, key="pattern_pca_timeline")
+                        
+                        # Quick tips
+                        st.markdown("""
+                        **💡 Animation Tips:**
+                        - 🔴 **Larger dots** = newest session in each frame
+                        - 🌈 **Color** = temporal progression (blue → red)
+                        - 📊 **Space changes** = how axes reorient with new data
+                        - ⏭️ **Use Final** button to jump to complete dataset
+                        """)
+                
+                elif animation_type.startswith("📊"):
+                    # Variance evolution
+                    variance_fig = create_variance_evolution_animation(results)
+                    if variance_fig:
+                        st.plotly_chart(variance_fig, use_container_width=True, key="pattern_variance_evolution")
+                
+                elif animation_type.startswith("🌊"):
+                    # Liminal Tunnel visualization - PCA + t-SNE hybrid through temporal space
+                    st.info("🌊 Liminal Tunnel: PCA + t-SNE hybrid flowing through 3D temporal space")
+                    tunnel_fig = create_liminal_tunnel_visualization(
+                        st.session_state.memory,
+                        st.session_state.meta
+                    )
+                    if tunnel_fig:
+                        st.plotly_chart(tunnel_fig, use_container_width=True, key="pattern_liminal_tunnel")
+                        
+                        # Liminal tunnel interpretation
+                        st.markdown("""
+                        **🌊 Liminal Tunnel Guide:**
+                        - **🚇 Tunnel spine** = Smooth temporal path through hybrid PCA-t-SNE space
+                        - **💎 Diamond anchors** = Actual session positions in hybrid space
+                        - **⚪ Flow particles** = Temporal progression indicators
+                        - **🌌 Liminal aesthetics** = Dark space with ethereal colors
+                        - **📐 Hybrid dimensions** = Global PCA structure + local t-SNE patterns
+                        """)
+                    else:
+                        st.error("Could not generate liminal tunnel visualization")
+                
+                elif animation_type.startswith("🌌"):
+                    # 4D Semantic Space visualization
+                    st.info("🌌 4D Semantic Space: Pure PCA with 4th dimension controlling visual properties")
+                    tunnel_fig = create_4d_semantic_space_visualization(
+                        st.session_state.memory,
+                        st.session_state.meta
+                    )
+                    if tunnel_fig:
+                        st.plotly_chart(tunnel_fig, use_container_width=True, key="pattern_4d_semantic_space")
+                        
+                        # 4D semantic space interpretation
+                        st.markdown("""
+                        **🌌 4D Semantic Space Guide:**
+                        - **🎯 Rotate & zoom** to explore 4D space from different angles
+                        - **🌈 Colors** represent the 4th semantic dimension (PC4)
+                        - **📏 Sizes** vary with 4th dimension intensity
+                        - **🔗 Connections** show semantic tunnels between sessions
+                        - **➡️ Arrows** show temporal flow direction
+                        """)
+                    else:
+                        st.error("Could not generate 4D semantic space visualization")
+    
+    else:
+        st.warning("Need ≥2 sessions for pattern analysis.")
+
+
+def render_dimensionality_tab():
+    """Dimensionality reduction analysis and comparison."""
+    st.header("📐 Dimensionality Analysis")
+    
+    if len(st.session_state.memory) > 1:
+        # Analysis options
+        analysis_mode = st.radio(
+            "Analysis mode:",
+            ["🎯 Enhanced PCA", "🔬 Method Comparison", "🌊 Liminal Tunnel Visualization"],
+            horizontal=True
+        )
+        
+        if analysis_mode.startswith("🎯"):
+            # Enhanced PCA with timeline
+            st.subheader("Enhanced PCA Analysis")
+            
+            # Show current method preference
+            preferred_method = st.session_state.get('preferred_method')
+            if preferred_method:
+                st.info(f"🎯 Your preferred method: **{preferred_method.upper()}** (from method comparison)")
+                
+                # Option to use preferred method if available
+                if preferred_method == 'umap' and 'method_results' in st.session_state:
+                    use_preferred = st.checkbox("Use UMAP instead of PCA", value=False, 
+                                              help="Use your preferred UMAP method for this analysis")
+                else:
+                    use_preferred = False
+                    if preferred_method != 'pca':
+                        st.warning(f"⚠️ {preferred_method.upper()} not available for interactive timeline analysis. Using PCA.")
+            else:
+                use_preferred = False
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                max_session = len(st.session_state.memory)
+                timeline_idx = st.slider(
+                    "Sessions to include:",
+                    2, max_session, max_session,
+                    help="Adjust to see how patterns develop over time"
+                )
+            with col2:
+                is_3d = st.checkbox("3D View", value=False)
+            
+            # Add animation controls
+            st.markdown("### 🎬 Animation Options")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                show_timeline_animation = st.checkbox("📈 PCA Over Time Animation", 
+                                                    value=False,
+                                                    help="See how PCA space evolves as sessions are added")
+            with col2:
+                if show_timeline_animation:
+                    animation_speed = st.selectbox("Animation Speed", [500, 800, 1200], index=1,
+                                                  help="Milliseconds per frame")
+                else:
+                    animation_speed = 800
+            with col3:
+                if show_timeline_animation:
+                    use_3d_animation = st.checkbox("3D Animation", value=is_3d,
+                                                  help="Use 3D view for timeline animation")
+                else:
+                    use_3d_animation = is_3d
+            
+            # Run analysis with preferred method if available and selected
+            if use_preferred and 'method_results' in st.session_state:
+                # Use cached UMAP results
+                method_results = st.session_state['method_results']
+                if method_results.get('umap_results'):
+                    fig = create_alternative_visualization(
+                        method_results['umap_results'], 
+                        st.session_state.meta, 
+                        "UMAP"
+                    )
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True, key="dimensionality_enhanced_umap")
+                        st.caption("🎯 Using UMAP (your preferred method)")
+                        
+                        # Show UMAP metrics
+                        umap_results = method_results['umap_results']
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Method", "UMAP")
+                        with col2:
+                            trust_score = method_results.get('results', {}).get('UMAP', {}).get('trust_score', 'N/A')
+                            st.metric("Trust Score", f"{trust_score:.3f}" if isinstance(trust_score, (int, float)) else trust_score)
+                        with col3:
+                            st.metric("Samples", f"{umap_results.get('n_samples', 'N/A'):,}")
+                else:
+                    st.error("UMAP results not available. Falling back to PCA.")
+                    use_preferred = False
+            
+            if not use_preferred:
+                # Standard PCA analysis
+                memory_slice = st.session_state.memory[:timeline_idx]
+                meta_slice = st.session_state.meta[:timeline_idx]
+                
+                if show_timeline_animation:
+                    # Show PCA over time animation
+                    st.subheader("🎬 PCA Space Evolution Over Time")
+                    st.info("🎥 Watch how the semantic space develops as sessions are progressively added")
+                    
+                    timeline_fig = create_pca_timeline_animation(
+                        st.session_state.memory[:timeline_idx],
+                        st.session_state.meta[:timeline_idx],
+                        animation_speed=animation_speed,
+                        is_3d=use_3d_animation
+                    )
+                    
+                    if timeline_fig:
+                        st.plotly_chart(timeline_fig, use_container_width=True, key="dimensionality_pca_timeline")
+                        
+                        # Animation interpretation guide
+                        with st.expander("🎭 How to Interpret the Animation"):
+                            st.markdown("""
+                            **🎬 Animation Guide:**
+                            - **▶️ Play Timeline**: Watch sessions being added chronologically
+                            - **Larger dots**: Newest session in each frame
+                            - **Color progression**: Blue → Red shows temporal order
+                            - **Space shifts**: How PCA axes reorient as data grows
+                            - **Quality changes**: Explained variance evolving over time
+                            
+                            **🔍 What to Look For:**
+                            - **Stable patterns**: Consistent positioning across frames
+                            - **Sudden shifts**: New sessions dramatically changing the space
+                            - **Convergence**: Space stabilizing as more data is added
+                            - **Outliers**: Sessions that reshape the entire analysis
+                            """)
+                else:
+                    # Standard static analysis
+                    results = robust_pca_pipeline(
+                        memory_slice, meta_slice, 
+                        n_components=3 if is_3d else 2,
+                        method='auto'
+                    )
+                    
+                    if results:
+                        # Visualization
+                        fig = create_pca_visualization(results, meta_slice, is_3d=is_3d)
+                        st.plotly_chart(fig, use_container_width=True, key="dimensionality_enhanced_pca")
+                        
+                        # Quality metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Explained Variance", f"{results['cumulative_variance'][-1]:.1%}")
+                        with col2:
+                            st.metric("Quality", results['quality_assessment'].title())
+                        with col3:
+                            st.metric("Method", results['method_used'])
+                        with col4:
+                            st.metric("Features", f"{results['n_features']:,}")
+        
+        elif analysis_mode.startswith("🔬"):
+            # Method comparison
+            st.subheader("Method Comparison")
+            
+            if st.button("🚀 Compare Methods", type="primary"):
+                with st.spinner("Comparing PCA, UMAP, and t-SNE..."):
+                    comparison_results = compare_dimensionality_methods(
+                        st.session_state.memory, 
+                        st.session_state.meta
+                    )
+                
+                if comparison_results:
+                    st.session_state['comparison_results'] = comparison_results
+                    
+                    # Show best method
+                    best_method = comparison_results['best_method']
+                    st.success(f"🏆 Best method: **{best_method}**")
+                    
+                    # Visualization of best method
+                    if best_method == "UMAP" and comparison_results.get('umap_results'):
+                        fig = create_alternative_visualization(
+                            comparison_results['umap_results'], 
+                            st.session_state.meta, 
+                            "UMAP"
+                        )
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True, key="dimensionality_method_comparison")
+                    
+                    # Add actionable buttons
+                    st.markdown("### 🎯 Apply Recommendation")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button(f"✅ Use {best_method} as Default", type="primary"):
+                            st.session_state['preferred_method'] = best_method.lower()
+                            st.session_state['method_results'] = comparison_results
+                            st.success(f"✅ {best_method} is now your default dimensionality reduction method!")
+                            st.info("💡 Other visualizations in the app will now use this method when possible.")
+                            st.rerun()
+                    
+                    with col2:
+                        if st.button("🔄 Reset to Auto"):
+                            if 'preferred_method' in st.session_state:
+                                del st.session_state['preferred_method']
+                            if 'method_results' in st.session_state:
+                                del st.session_state['method_results']
+                            st.success("🔄 Reset to automatic method selection.")
+                            st.rerun()
+                    
+                    # Results summary
+                    with st.expander("📊 Detailed Results"):
+                        results = comparison_results.get('results', {})
+                        for method, data in results.items():
+                            st.markdown(f"**{method}:**")
+                            if isinstance(data, dict):
+                                for key, value in data.items():
+                                    if isinstance(value, (int, float)):
+                                        st.write(f"  - {key}: {value:.3f}")
+            
+            # Show current method preference
+            if 'preferred_method' in st.session_state:
+                preferred = st.session_state['preferred_method'].upper()
+                st.info(f"🎯 **Current default method**: {preferred}")
+                
+                # Show when this method is being used
+                st.markdown("**This method is automatically used in:**")
+                st.markdown("- 🏠 Overview dashboard visualizations")
+                st.markdown("- 🌊 Evolution tab PCA plots")
+                st.markdown("- 🔍 Pattern analysis animations")
+            
+            # Show stored results
+            if 'comparison_results' in st.session_state:
+                st.markdown("### Previous Comparison Results")
+                results = st.session_state['comparison_results'].get('results', {})
+                df_results = pd.DataFrame(results).T
+                st.dataframe(df_results, use_container_width=True)
+        
+        elif analysis_mode.startswith("🌊"):
+            # Liminal Tunnel Visualization
+            st.subheader("🌊 Liminal Tunnel Visualization")
+            st.info("🚇 Journey through hybrid PCA-t-SNE space with temporal tunneling effects")
+            
+            # Tunnel type selector
+            tunnel_type = st.radio(
+                "Choose tunnel type:",
+                ["🌊 Liminal Tunnel (PCA + t-SNE)", "🌌 4D Semantic Space (Pure PCA)"],
+                horizontal=True
+            )
+            
+            # Tunnel visualization controls
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🚀 Generate Tunnel", type="primary"):
+                    if tunnel_type.startswith("🌊"):
+                        with st.spinner("Creating liminal tunnel through PCA-t-SNE hybrid space..."):
+                            tunnel_fig = create_liminal_tunnel_visualization(
+                                st.session_state.memory,
+                                st.session_state.meta
+                            )
+                            tunnel_key = 'liminal_tunnel_visualization'
+                    else:
+                        with st.spinner("Creating 4D semantic space visualization..."):
+                            tunnel_fig = create_4d_semantic_space_visualization(
+                                st.session_state.memory,
+                                st.session_state.meta
+                            )
+                            tunnel_key = '4d_semantic_space_visualization'
+                    
+                    if tunnel_fig:
+                        st.session_state[tunnel_key] = tunnel_fig
+                        st.success(f"✅ {tunnel_type.split(' ')[1]} visualization created!")
+                    else:
+                        st.error(f"❌ Could not create {tunnel_type.lower()} visualization")
+            
+            with col2:
+                # Clear button for active visualizations
+                active_visualizations = []
+                if 'liminal_tunnel_visualization' in st.session_state:
+                    active_visualizations.append('Liminal Tunnel')
+                if '4d_semantic_space_visualization' in st.session_state:
+                    active_visualizations.append('4D Semantic Space')
+                
+                if active_visualizations:
+                    clear_option = st.selectbox("Clear visualization:", ["None"] + active_visualizations)
+                    if st.button("🔄 Clear Selected"):
+                        if clear_option == "Liminal Tunnel":
+                            del st.session_state['liminal_tunnel_visualization']
+                        elif clear_option == "4D Semantic Space":
+                            del st.session_state['4d_semantic_space_visualization']
+                        if clear_option != "None":
+                            st.success(f"🗑️ {clear_option} visualization cleared")
+                            st.rerun()
+            
+            # Show stored visualizations
+            if 'liminal_tunnel_visualization' in st.session_state:
+                st.markdown("### 🌊 Liminal Tunnel")
+                st.plotly_chart(
+                    st.session_state['liminal_tunnel_visualization'], 
+                    use_container_width=True, 
+                    key="dimensionality_liminal_tunnel"
+                )
+                
+                # Liminal tunnel interpretation guide
+                with st.expander("🌊 How to Interpret the Liminal Tunnel"):
+                    st.markdown("""
+                    **🌊 Liminal Tunnel Features:**
+                    - **🚇 Tunnel Spine**: Smooth spline path through hybrid PCA-t-SNE space
+                    - **💎 Session Anchors**: Diamond markers at actual session positions
+                    - **⚪ Flow Particles**: White particles showing temporal progression
+                    - **🌌 Tunnel Surface**: Semi-transparent surface creating tunnel effect
+                    - **🎨 Liminal Aesthetics**: Dark ethereal space with plasma colors
+                    
+                    **🔍 What to Look For:**
+                    - **Tunnel curvature**: How PCA global structure + t-SNE local patterns combine
+                    - **Session positioning**: Where sessions anchor in the hybrid space
+                    - **Color progression**: Temporal flow from purple to yellow
+                    - **Tunnel width**: Varies based on session variance and characteristics
+                    - **Smooth transitions**: Spline interpolation creating fluid movement
+                    
+                    **🎯 Interactive Features:**
+                    - **Rotate & Zoom**: Explore the liminal space from different angles
+                    - **Hover**: Get session details and coordinates
+                    - **Flow visualization**: Follow particles along temporal path
+                    """)
+            
+            if '4d_semantic_space_visualization' in st.session_state:
+                st.markdown("### 🌌 4D Semantic Space")
+                st.plotly_chart(
+                    st.session_state['4d_semantic_space_visualization'], 
+                    use_container_width=True, 
+                    key="dimensionality_4d_semantic_space"
+                )
+                
+                # 4D semantic space interpretation guide
+                with st.expander("🌌 How to Interpret the 4D Semantic Space"):
+                    st.markdown("""
+                    **🌌 4D Semantic Space Features:**
+                    - **📍 Session Centers**: Large spheres representing session centroids
+                    - **🔗 Semantic Tunnels**: Connect consecutive sessions through 4D space
+                    - **🌈 4th Dimension Colors**: PC4 values control visual properties
+                    - **📏 Variable Sizes**: Marker and tunnel sizes based on PC4 intensity
+                    - **➡️ Flow Arrows**: Cone arrows showing temporal direction
+                    
+                    **🔍 What to Look For:**
+                    - **Color intensity**: High PC4 values = complex semantic patterns
+                    - **Size variations**: Large elements = high 4th dimension activity
+                    - **Tunnel paths**: How sessions connect through 4D semantic space
+                    - **Arrow flow**: Temporal progression through the space
+                    - **Clustering**: Periods of similar 4D semantic positioning
+                    
+                    **🎯 Interactive Features:**
+                    - **4D Exploration**: Rotate to see different 4D perspectives
+                    - **Hover Details**: Get complete 4D coordinates and session info
+                    - **Legend Control**: Toggle elements on/off
+                    """)
+            
+            # Show information if no visualizations are active
+            if not ('liminal_tunnel_visualization' in st.session_state or '4d_semantic_space_visualization' in st.session_state):
+                st.markdown("### 💡 About Tunnel Visualizations")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("""
+                    **🌊 Liminal Tunnel**
+                    
+                    The **Liminal Tunnel** creates a hybrid visualization combining:
+                    - **PCA global structure** (70% weight)
+                    - **t-SNE local relationships** (30% weight)
+                    - **Smooth spline interpolation** for temporal flow
+                    - **Ethereal liminal aesthetics** for immersive experience
+                    
+                    **Perfect for:**
+                    - Exploring temporal semantic evolution
+                    - Seeing both global and local patterns
+                    - Understanding transitional phases
+                    - Immersive data exploration
+                    """)
+                
+                with col2:
+                    st.markdown("""
+                    **🌌 4D Semantic Space**
+                    
+                    The **4D Semantic Space** provides:
+                    - **Pure 4D PCA analysis** with all components
+                    - **4th dimension visual mapping** to properties
+                    - **Semantic tunnels** connecting sessions
+                    - **Temporal flow indicators** with arrows
+                    
+                    **Perfect for:**
+                    - Understanding high-dimensional relationships
+                    - Exploring 4th semantic dimension effects
+                    - Analyzing complex semantic patterns
+                    - Mathematical precision in visualization
+                    """)
+                
+                st.info("🚀 Choose a tunnel type and click **'Generate Tunnel'** to begin your journey!")
+    
+        else:
+            st.warning("Need ≥2 sessions for dimensionality analysis.")
+
+
+def main():
+    """Main application with clean, intuitive interface."""
+    # Clean up any rerun flags
+    if st.session_state.get("csv_imported", False):
+        st.session_state["csv_imported"] = False
+    
+    # Check if we have data
+    has_data = len(st.session_state.get('memory', [])) > 0
+    
+    if not has_data:
+        # Show upload screen for new users
+        render_upload_screen()
+    else:
+        # Show main app interface
+        render_simple_sidebar()
+        
+        # Main tabs (simplified to 4 focused areas)
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "🏠 Overview", 
+            "🌊 Evolution", 
+            "🔍 Patterns", 
+            "📐 Dimensionality",
+            "🤖 AI Insights"
+        ])
+        
+        with tab1:
+            render_overview_dashboard()
+        
+        with tab2:
+            render_semantic_evolution_tab()
+        
+        with tab3:
+            render_pattern_analysis_tab()
+        
+        with tab4:
+            render_dimensionality_tab()
+        
+        with tab5:
+            st.header("🤖 AI-Powered Analysis")
+            render_comprehensive_chat_analysis()
+
 
 if __name__ == "__main__":
     main() 

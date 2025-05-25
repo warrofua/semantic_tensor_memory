@@ -82,7 +82,7 @@ A structured, interpretable memory system for tracking meaning across time, toke
 ---
 
 ## 📄 Citation
-If you use this codebase or ideas in your research, please cite the accompanying paper or link to this repository.
+If you use this codebase or ideas in your research, please cite the accompanying paper or link to this repository. 
 
 ---
 

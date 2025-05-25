@@ -6,8 +6,17 @@ def cosine(a: torch.Tensor, b: torch.Tensor) -> float:
     return torch.nn.functional.cosine_similarity(a, b, dim=-1).mean().item()
 
 def session_mean(mat: torch.Tensor) -> torch.Tensor:
-    """Average over tokens -> [embed_dim]."""
-    return mat.mean(0)
+    """Extract session representation -> [embed_dim].
+    
+    🧠 SEMANTIC UPGRADE: With CLS token embeddings, this just extracts
+    the single semantic vector (no averaging needed).
+    """
+    if mat.shape[0] == 1:
+        # CLS token approach: already have single semantic vector
+        return mat.squeeze(0)
+    else:
+        # Fallback for legacy token sequences: use mean
+        return mat.mean(0)
 
 def drift_series(tensors: List[torch.Tensor]) -> Tuple[List[float], List[int]]:
     """Return drift metrics between consecutive sessions.
