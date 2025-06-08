@@ -20,6 +20,7 @@ import re
 from datetime import datetime
 import io
 import base64
+import time
 
 
 def plot_drift_plotly(drifts, token_counts):
@@ -956,497 +957,257 @@ def create_4d_semantic_space_visualization(memory, meta):
     return fig
 
 
-def create_liminal_tunnel_visualization(memory, meta, tunnel_segments=50, tunnel_radius_base=0.15):
-    """Create an animated 3D tube tunnel that grows over time through liminal space combining PCA and t-SNE."""
+def create_liminal_tunnel_visualization(memory, meta, tunnel_segments=25, tunnel_radius_base=0.15):
+    """Create an optimized 3D tube tunnel through liminal space combining PCA and t-SNE."""
     if len(memory) < 3:
         return None
     
-    from streamlit_utils import robust_pca_pipeline
-    from viz.pca_plot import prepare_for_pca
-    from sklearn.manifold import TSNE
-    from scipy.interpolate import interp1d
+    # PERFORMANCE OPTIMIZATION: Add early timeout check
+    start_time = time.time()
+    max_computation_time = 30  # 30 second timeout
     
-    # Prepare data
-    flat, session_ids, token_ids = prepare_for_pca(memory)
-    
-    # Calculate session centroids for temporal path
-    unique_sessions = sorted(set(session_ids))
-    session_centroids_high_dim = []
-    session_metadata = []
-    
-    for session_idx in unique_sessions:
-        session_mask = np.array(session_ids) == session_idx
-        session_points = flat[session_mask]
-        centroid = session_points.mean(axis=0)
-        session_centroids_high_dim.append(centroid)
-        
-        session_metadata.append({
-            'session_idx': session_idx,
-            'session_name': f'Session {session_idx + 1}',
-            'text': meta[session_idx]['text'][:100] + "...",
-            'token_count': session_points.shape[0],
-            'variance': np.std(session_points, axis=0).mean()
-        })
-    
-    session_centroids_high_dim = np.array(session_centroids_high_dim)
-    
-    # 1. PCA for global structure (provides the backbone)
-    pca_results = robust_pca_pipeline(memory, meta, n_components=3, method='pca')
-    if not pca_results:
-        return None
-    
-    pca_session_centroids = []
-    for session_idx in unique_sessions:
-        session_mask = np.array(pca_results['session_ids']) == session_idx
-        if np.any(session_mask):
-            pca_centroid = pca_results['reduced'][session_mask].mean(axis=0)
-            pca_session_centroids.append(pca_centroid)
-    
-    pca_session_centroids = np.array(pca_session_centroids)
-    
-    # 2. t-SNE for local relationships (provides the curvature)
-    # Use a subset for t-SNE performance
-    max_samples_tsne = 500
-    if len(session_centroids_high_dim) > max_samples_tsne:
-        tsne_indices = np.linspace(0, len(session_centroids_high_dim)-1, max_samples_tsne, dtype=int)
-        tsne_data = session_centroids_high_dim[tsne_indices]
-        tsne_sessions = [unique_sessions[i] for i in tsne_indices]
-    else:
-        tsne_data = session_centroids_high_dim
-        tsne_sessions = unique_sessions
-    
-    # Calculate t-SNE with 3D output
-    tsne = TSNE(n_components=3, random_state=42, perplexity=min(30, len(tsne_data)//4))
-    tsne_result = tsne.fit_transform(tsne_data)
-    
-    # 3. Combine PCA and t-SNE through weighted interpolation
-    # PCA provides global structure, t-SNE provides local refinement
-    alpha = 0.7  # Weight for PCA (0.7) vs t-SNE (0.3)
-    
-    # Normalize both to similar scales
-    pca_normalized = (pca_session_centroids - pca_session_centroids.mean(axis=0)) / pca_session_centroids.std(axis=0)
-    tsne_normalized = (tsne_result - tsne_result.mean(axis=0)) / tsne_result.std(axis=0)
-    
-    # Create hybrid coordinates
-    if len(tsne_normalized) == len(pca_normalized):
-        hybrid_coords = alpha * pca_normalized + (1 - alpha) * tsne_normalized
-    else:
-        # If different lengths, interpolate t-SNE to match PCA
+    try:
+        from streamlit_utils import robust_pca_pipeline
+        from viz.pca_plot import prepare_for_pca
+        from sklearn.manifold import TSNE
         from scipy.interpolate import interp1d
-        if len(tsne_normalized) > 1:
-            interp_func_x = interp1d(np.linspace(0, 1, len(tsne_normalized)), tsne_normalized[:, 0], kind='cubic', fill_value='extrapolate')
-            interp_func_y = interp1d(np.linspace(0, 1, len(tsne_normalized)), tsne_normalized[:, 1], kind='cubic', fill_value='extrapolate')
-            interp_func_z = interp1d(np.linspace(0, 1, len(tsne_normalized)), tsne_normalized[:, 2], kind='cubic', fill_value='extrapolate')
+        
+        # OPTIMIZATION 1: Reduced tunnel complexity
+        tunnel_segments = min(tunnel_segments, 20)  # Cap at 20 segments
+        
+        # Prepare data with size limits
+        flat, session_ids, token_ids = prepare_for_pca(memory)
+        
+        # OPTIMIZATION 2: Limit data size for performance
+        max_data_points = 2000  # Dramatically reduced from unlimited
+        if len(flat) > max_data_points:
+            indices = np.linspace(0, len(flat)-1, max_data_points, dtype=int)
+            flat = flat[indices]
+            session_ids = [session_ids[i] for i in indices]
+            token_ids = [token_ids[i] for i in indices]
+        
+        # Calculate session centroids for temporal path
+        unique_sessions = sorted(set(session_ids))
+        session_centroids_high_dim = []
+        session_metadata = []
+        
+        for session_idx in unique_sessions:
+            session_mask = np.array(session_ids) == session_idx
+            session_points = flat[session_mask]
+            if len(session_points) > 0:
+                centroid = session_points.mean(axis=0)
+                session_centroids_high_dim.append(centroid)
+                
+                session_metadata.append({
+                    'session_idx': session_idx,
+                    'session_name': f'Session {session_idx + 1}',
+                    'text': meta[session_idx]['text'][:100] + "...",
+                    'token_count': session_points.shape[0],
+                    'variance': np.std(session_points, axis=0).mean()
+                })
+        
+        session_centroids_high_dim = np.array(session_centroids_high_dim)
+        
+        # Check timeout
+        if time.time() - start_time > max_computation_time:
+            st.warning("⚠️ Computation timeout - using simplified visualization")
+            return create_simple_tunnel_fallback(session_centroids_high_dim, session_metadata)
+        
+        # OPTIMIZATION 3: Skip t-SNE for small datasets or use faster alternative
+        if len(session_centroids_high_dim) <= 8:
+            st.info("🚀 Using PCA-only mode for optimal performance")
+            # Use PCA only for small datasets
+            pca_results = robust_pca_pipeline(memory, meta, n_components=3, method='pca')
+            if not pca_results:
+                return None
             
-            t_values = np.linspace(0, 1, len(pca_normalized))
-            tsne_interpolated = np.column_stack([
-                interp_func_x(t_values),
-                interp_func_y(t_values),
-                interp_func_z(t_values)
-            ])
-            hybrid_coords = alpha * pca_normalized + (1 - alpha) * tsne_interpolated
+            pca_session_centroids = []
+            for session_idx in unique_sessions:
+                session_mask = np.array(pca_results['session_ids']) == session_idx
+                if np.any(session_mask):
+                    pca_centroid = pca_results['reduced'][session_mask].mean(axis=0)
+                    pca_session_centroids.append(pca_centroid)
+            
+            hybrid_coords = np.array(pca_session_centroids)
+            
         else:
-            hybrid_coords = pca_normalized
-    
-    # 4. Create smooth tunnel path using spline interpolation
-    if len(hybrid_coords) < 3:
+            # OPTIMIZATION 4: Heavily constrained t-SNE
+            st.info("🔄 Running fast hybrid PCA+t-SNE analysis...")
+            
+            # 1. PCA for global structure 
+            pca_results = robust_pca_pipeline(memory, meta, n_components=3, method='pca')
+            if not pca_results:
+                return None
+            
+            pca_session_centroids = []
+            for session_idx in unique_sessions:
+                session_mask = np.array(pca_results['session_ids']) == session_idx
+                if np.any(session_mask):
+                    pca_centroid = pca_results['reduced'][session_mask].mean(axis=0)
+                    pca_session_centroids.append(pca_centroid)
+            
+            pca_session_centroids = np.array(pca_session_centroids)
+            
+            # 2. FAST t-SNE with aggressive constraints
+            max_samples_tsne = min(100, len(session_centroids_high_dim))  # Drastically reduced
+            if len(session_centroids_high_dim) > max_samples_tsne:
+                tsne_indices = np.linspace(0, len(session_centroids_high_dim)-1, max_samples_tsne, dtype=int)
+                tsne_data = session_centroids_high_dim[tsne_indices]
+            else:
+                tsne_data = session_centroids_high_dim
+            
+            # Check timeout before t-SNE
+            if time.time() - start_time > max_computation_time * 0.7:
+                st.warning("⚠️ Skipping t-SNE due to time constraints - using PCA only")
+                hybrid_coords = pca_session_centroids
+            else:
+                try:
+                    # ULTRA-FAST t-SNE parameters
+                    with st.spinner("⚡ Fast t-SNE computation..."):
+                        tsne = TSNE(
+                            n_components=3, 
+                            random_state=42, 
+                            perplexity=min(5, len(tsne_data)//3),  # Much smaller perplexity
+                            n_iter=250,  # Reduced iterations
+                            learning_rate=500,  # Faster learning
+                            early_exaggeration=4  # Faster convergence
+                        )
+                        tsne_result = tsne.fit_transform(tsne_data)
+                    
+                    # 3. Quick hybrid combination
+                    alpha = 0.8  # More weight to faster PCA
+                    
+                    # Simple normalization
+                    pca_norm = pca_session_centroids / np.std(pca_session_centroids)
+                    tsne_norm = tsne_result / np.std(tsne_result)
+                    
+                    # Direct interpolation if needed
+                    if len(tsne_norm) != len(pca_norm):
+                        from scipy.interpolate import interp1d
+                        if len(tsne_norm) > 1:
+                            t_old = np.linspace(0, 1, len(tsne_norm))
+                            t_new = np.linspace(0, 1, len(pca_norm))
+                            tsne_interp = np.column_stack([
+                                interp1d(t_old, tsne_norm[:, 0], kind='linear')(t_new),
+                                interp1d(t_old, tsne_norm[:, 1], kind='linear')(t_new),
+                                interp1d(t_old, tsne_norm[:, 2], kind='linear')(t_new)
+                            ])
+                            hybrid_coords = alpha * pca_norm + (1 - alpha) * tsne_interp
+                        else:
+                            hybrid_coords = pca_norm
+                    else:
+                        hybrid_coords = alpha * pca_norm + (1 - alpha) * tsne_norm
+                        
+                except Exception as e:
+                    st.warning(f"⚠️ t-SNE failed ({str(e)}) - using PCA only")
+                    hybrid_coords = pca_session_centroids
+        
+        # Check final timeout
+        if time.time() - start_time > max_computation_time:
+            st.warning("⚠️ Computation timeout - using simplified tunnel")
+            return create_simple_tunnel_fallback(hybrid_coords, session_metadata)
+        
+        # OPTIMIZATION 5: Simplified tunnel creation
+        return create_optimized_tunnel_mesh(hybrid_coords, session_metadata, tunnel_segments, tunnel_radius_base)
+        
+    except Exception as e:
+        st.error(f"❌ Liminal tunnel creation failed: {str(e)}")
         return None
+
+def create_simple_tunnel_fallback(coords, metadata):
+    """Create a simple line-based tunnel for when full mesh fails."""
+    fig = go.Figure()
     
-    # Create smooth spline path through the hybrid coordinates
+    # Simple line path
+    fig.add_trace(go.Scatter3d(
+        x=coords[:, 0],
+        y=coords[:, 1], 
+        z=coords[:, 2] if coords.shape[1] > 2 else np.zeros(len(coords)),
+        mode='lines+markers',
+        line=dict(color='purple', width=8),
+        marker=dict(size=10, color='yellow'),
+        name='Simplified Tunnel Path',
+        hovertemplate="<b>Session %{text}</b><br>Simplified tunnel path<extra></extra>",
+        text=[f"S{i+1}" for i in range(len(coords))]
+    ))
+    
+    fig.update_layout(
+        title="⚡ Simplified Tunnel (Performance Mode)",
+        scene=dict(bgcolor='rgba(5,5,15,0.95)'),
+        height=600
+    )
+    
+    return fig
+
+def create_optimized_tunnel_mesh(hybrid_coords, session_metadata, tunnel_segments, tunnel_radius_base):
+    """Create optimized tunnel mesh with reduced complexity."""
+    if len(hybrid_coords) < 3:
+        return create_simple_tunnel_fallback(hybrid_coords, session_metadata)
+    
+    # OPTIMIZATION 6: Linear interpolation instead of splines
     t_original = np.linspace(0, 1, len(hybrid_coords))
     t_smooth = np.linspace(0, 1, tunnel_segments)
     
-    # Spline interpolation for smooth tunnel centerline
-    spline_x = interp1d(t_original, hybrid_coords[:, 0], kind='cubic')
-    spline_y = interp1d(t_original, hybrid_coords[:, 1], kind='cubic')
-    spline_z = interp1d(t_original, hybrid_coords[:, 2], kind='cubic')
+    # Simple linear interpolation (faster than cubic splines)
+    tunnel_x = np.interp(t_smooth, t_original, hybrid_coords[:, 0])
+    tunnel_y = np.interp(t_smooth, t_original, hybrid_coords[:, 1])
+    tunnel_z = np.interp(t_smooth, t_original, hybrid_coords[:, 2])
     
-    tunnel_centerline_x = spline_x(t_smooth)
-    tunnel_centerline_y = spline_y(t_smooth)
-    tunnel_centerline_z = spline_z(t_smooth)
+    # OPTIMIZATION 7: Simplified tube with fewer radial segments
+    n_radial = 8  # Reduced from 16
+    theta = np.linspace(0, 2*np.pi, n_radial, endpoint=False)
     
-    # 5. Create animation frames - tunnel grows over time
-    n_frames = min(len(unique_sessions), 15)  # Limit frames for performance
-    if n_frames < 3:
-        n_frames = len(unique_sessions)
+    tube_x, tube_y, tube_z = [], [], []
+    tube_colors = []
     
-    # Calculate frame boundaries
-    frame_lengths = np.linspace(3, len(tunnel_centerline_x), n_frames, dtype=int)
+    for i in range(len(tunnel_x)):
+        # Simple perpendicular vectors (less computation)
+        progress = i / (len(tunnel_x) - 1)
+        radius = tunnel_radius_base * (1 + 0.2 * progress)  # Simple radius variation
+        
+        # Basic circular cross-section in XY plane
+        for angle in theta:
+            tube_x.append(tunnel_x[i] + radius * np.cos(angle))
+            tube_y.append(tunnel_y[i] + radius * np.sin(angle))
+            tube_z.append(tunnel_z[i])
+            tube_colors.append(progress)
     
-    def create_tunnel_mesh_for_length(length):
-        """Create tube mesh for a specific tunnel length."""
-        n_radial = 16  # Number of points around circumference
-        theta = np.linspace(0, 2*np.pi, n_radial, endpoint=False)
-        
-        # Initialize arrays for tube mesh
-        tube_vertices_x = []
-        tube_vertices_y = []
-        tube_vertices_z = []
-        tube_colors = []
-        
-        # Generate tube surface vertices for this length
-        for i in range(length):
-            # Calculate local coordinate system at each point
-            if i < length - 1:
-                # Forward direction
-                direction = np.array([
-                    tunnel_centerline_x[i+1] - tunnel_centerline_x[i],
-                    tunnel_centerline_y[i+1] - tunnel_centerline_y[i],
-                    tunnel_centerline_z[i+1] - tunnel_centerline_z[i]
-                ])
-            else:
-                # Backward direction for last point
-                direction = np.array([
-                    tunnel_centerline_x[i] - tunnel_centerline_x[i-1],
-                    tunnel_centerline_y[i] - tunnel_centerline_y[i-1],
-                    tunnel_centerline_z[i] - tunnel_centerline_z[i-1]
-                ])
-            
-            # Normalize direction vector
-            direction = direction / (np.linalg.norm(direction) + 1e-8)
-            
-            # Create perpendicular vectors for circular cross-section
-            if abs(direction[2]) < 0.9:
-                perp1 = np.cross(direction, np.array([0, 0, 1]))
-            else:
-                perp1 = np.cross(direction, np.array([1, 0, 0]))
-            perp1 = perp1 / (np.linalg.norm(perp1) + 1e-8)
-            perp2 = np.cross(direction, perp1)
-            perp2 = perp2 / (np.linalg.norm(perp2) + 1e-8)
-            
-            # Calculate radius at this point (varies with session characteristics)
-            progress = i / (len(tunnel_centerline_x) - 1)
-            session_idx = min(int(progress * len(session_metadata)), len(session_metadata) - 1)
-            variance_factor = session_metadata[session_idx]['variance']
-            avg_variance = np.mean([s['variance'] for s in session_metadata])
-            radius = tunnel_radius_base * (1 + 0.3 * variance_factor / (avg_variance + 1e-8))
-            
-            # Generate circular cross-section
-            for j, angle in enumerate(theta):
-                # Point on the circle
-                circle_x = tunnel_centerline_x[i] + radius * (np.cos(angle) * perp1[0] + np.sin(angle) * perp2[0])
-                circle_y = tunnel_centerline_y[i] + radius * (np.cos(angle) * perp1[1] + np.sin(angle) * perp2[1])
-                circle_z = tunnel_centerline_z[i] + radius * (np.cos(angle) * perp1[2] + np.sin(angle) * perp2[2])
-                
-                tube_vertices_x.append(circle_x)
-                tube_vertices_y.append(circle_y)
-                tube_vertices_z.append(circle_z)
-                
-                # Color based on temporal progression
-                tube_colors.append(progress)
-        
-        # Create triangular mesh for tube surface
-        triangles_i = []
-        triangles_j = []
-        triangles_k = []
-        
-        for i in range(length - 1):
-            for j in range(n_radial):
-                # Current ring indices
-                curr_base = i * n_radial
-                next_base = (i + 1) * n_radial
-                
-                # Current and next indices on the ring
-                curr_j = curr_base + j
-                curr_j_next = curr_base + ((j + 1) % n_radial)
-                next_j = next_base + j
-                next_j_next = next_base + ((j + 1) % n_radial)
-                
-                # Two triangles per quad
-                # Triangle 1
-                triangles_i.append(curr_j)
-                triangles_j.append(next_j)
-                triangles_k.append(curr_j_next)
-                
-                # Triangle 2
-                triangles_i.append(curr_j_next)
-                triangles_j.append(next_j)
-                triangles_k.append(next_j_next)
-        
-        return {
-            'vertices_x': tube_vertices_x,
-            'vertices_y': tube_vertices_y,
-            'vertices_z': tube_vertices_z,
-            'colors': tube_colors,
-            'triangles_i': triangles_i,
-            'triangles_j': triangles_j,
-            'triangles_k': triangles_k,
-            'centerline_x': tunnel_centerline_x[:length],
-            'centerline_y': tunnel_centerline_y[:length],
-            'centerline_z': tunnel_centerline_z[:length]
-        }
-    
-    # 6. Create the animated 3D tunnel visualization
+    # OPTIMIZATION 8: No animation frames - static visualization
     fig = go.Figure()
     
-    # Create initial frame (smallest tunnel)
-    initial_mesh = create_tunnel_mesh_for_length(frame_lengths[0])
-    
-    # Add the main tunnel mesh (initial frame)
-    fig.add_trace(go.Mesh3d(
-        x=initial_mesh['vertices_x'],
-        y=initial_mesh['vertices_y'],
-        z=initial_mesh['vertices_z'],
-        i=initial_mesh['triangles_i'],
-        j=initial_mesh['triangles_j'],
-        k=initial_mesh['triangles_k'],
-        intensity=initial_mesh['colors'],
-        colorscale='Plasma',  # Liminal purple-to-yellow progression
-        opacity=0.8,
-        lighting=dict(ambient=0.3, diffuse=0.8, specular=0.5),
-        lightposition=dict(x=100, y=100, z=100),
-        name='Growing Tunnel',
-        colorbar=dict(
-            title="Temporal Flow",
-            x=1.02
-        ),
-        hovertemplate="<b>Tunnel Surface</b><br>Temporal Progress: %{intensity:.1%}<extra></extra>"
-    ))
-    
-    # Add tunnel centerline (initial)
+    # Main tunnel path
     fig.add_trace(go.Scatter3d(
-        x=initial_mesh['centerline_x'],
-        y=initial_mesh['centerline_y'],
-        z=initial_mesh['centerline_z'],
+        x=tunnel_x,
+        y=tunnel_y,
+        z=tunnel_z,
         mode='lines',
-        line=dict(
-            color='rgba(255,255,255,0.9)',
-            width=8
-        ),
-        name='Tunnel Path',
-        hovertemplate="<b>Tunnel Centerline</b><br>X: %{x:.3f}<br>Y: %{y:.3f}<br>Z: %{z:.3f}<extra></extra>",
-        showlegend=False
+        line=dict(color='purple', width=6),
+        name='Tunnel Centerline',
+        hovertemplate="<b>Tunnel Path</b><br>Progress: %{customdata:.1%}<extra></extra>",
+        customdata=[i/len(tunnel_x) for i in range(len(tunnel_x))]
     ))
     
-    # Add session anchor points (initially only first few)
-    initial_sessions = min(3, len(hybrid_coords))
+    # Session markers
     fig.add_trace(go.Scatter3d(
-        x=hybrid_coords[:initial_sessions, 0],
-        y=hybrid_coords[:initial_sessions, 1],
-        z=hybrid_coords[:initial_sessions, 2],
+        x=hybrid_coords[:, 0],
+        y=hybrid_coords[:, 1],
+        z=hybrid_coords[:, 2],
         mode='markers+text',
-        marker=dict(
-            size=12,
-            color=np.linspace(0, 1, initial_sessions),
-            colorscale='Viridis',
-            opacity=1.0,
-            line=dict(width=3, color='white'),
-            symbol='diamond'
-        ),
-        text=[f"S{i+1}" for i in range(initial_sessions)],
+        marker=dict(size=12, color='yellow', symbol='diamond'),
+        text=[f"S{i+1}" for i in range(len(hybrid_coords))],
         textposition='top center',
-        textfont=dict(size=12, color='white', family='Arial Black'),
         name='Session Anchors',
-        hovertemplate="<b>%{text}</b><br>%{customdata}<br>Coordinates: (%{x:.3f}, %{y:.3f}, %{z:.3f})<extra></extra>",
-        customdata=[session_metadata[i]['text'] for i in range(initial_sessions)]
+        hovertemplate="<b>%{text}</b><br>%{customdata}<extra></extra>",
+        customdata=[m['text'] for m in session_metadata]
     ))
     
-    # Add growing tip indicator
-    fig.add_trace(go.Scatter3d(
-        x=[tunnel_centerline_x[frame_lengths[0]-1]],
-        y=[tunnel_centerline_y[frame_lengths[0]-1]],
-        z=[tunnel_centerline_z[frame_lengths[0]-1]],
-        mode='markers',
-        marker=dict(
-            size=15,
-            color='rgba(255,100,100,1.0)',
-            symbol='circle',
-            line=dict(width=4, color='rgba(255,255,255,1.0)')
-        ),
-        name='Growing Tip',
-        hovertemplate="<b>Tunnel Tip</b><br>Current end of tunnel<extra></extra>",
-        showlegend=False
-    ))
-    
-    # 7. Create animation frames
-    frames = []
-    for frame_idx, length in enumerate(frame_lengths):
-        mesh_data = create_tunnel_mesh_for_length(length)
-        
-        # Calculate how many sessions to show
-        progress_ratio = length / len(tunnel_centerline_x)
-        sessions_to_show = min(int(progress_ratio * len(hybrid_coords)) + 1, len(hybrid_coords))
-        
-        # Create frame
-        frame = go.Frame(
-            data=[
-                # Updated tunnel mesh
-                go.Mesh3d(
-                    x=mesh_data['vertices_x'],
-                    y=mesh_data['vertices_y'],
-                    z=mesh_data['vertices_z'],
-                    i=mesh_data['triangles_i'],
-                    j=mesh_data['triangles_j'],
-                    k=mesh_data['triangles_k'],
-                    intensity=mesh_data['colors'],
-                    colorscale='Plasma',
-                    opacity=0.8,
-                    lighting=dict(ambient=0.3, diffuse=0.8, specular=0.5),
-                    lightposition=dict(x=100, y=100, z=100),
-                    name='Growing Tunnel',
-                    colorbar=dict(title="Temporal Flow", x=1.02),
-                    hovertemplate="<b>Tunnel Surface</b><br>Temporal Progress: %{intensity:.1%}<extra></extra>"
-                ),
-                # Updated centerline
-                go.Scatter3d(
-                    x=mesh_data['centerline_x'],
-                    y=mesh_data['centerline_y'],
-                    z=mesh_data['centerline_z'],
-                    mode='lines',
-                    line=dict(color='rgba(255,255,255,0.9)', width=8),
-                    name='Tunnel Path',
-                    hovertemplate="<b>Tunnel Centerline</b><br>X: %{x:.3f}<br>Y: %{y:.3f}<br>Z: %{z:.3f}<extra></extra>",
-                    showlegend=False
-                ),
-                # Updated session anchors
-                go.Scatter3d(
-                    x=hybrid_coords[:sessions_to_show, 0],
-                    y=hybrid_coords[:sessions_to_show, 1],
-                    z=hybrid_coords[:sessions_to_show, 2],
-                    mode='markers+text',
-                    marker=dict(
-                        size=12,
-                        color=np.linspace(0, 1, sessions_to_show),
-                        colorscale='Viridis',
-                        opacity=1.0,
-                        line=dict(width=3, color='white'),
-                        symbol='diamond'
-                    ),
-                    text=[f"S{i+1}" for i in range(sessions_to_show)],
-                    textposition='top center',
-                    textfont=dict(size=12, color='white', family='Arial Black'),
-                    name='Session Anchors',
-                    hovertemplate="<b>%{text}</b><br>%{customdata}<br>Coordinates: (%{x:.3f}, %{y:.3f}, %{z:.3f})<extra></extra>",
-                    customdata=[session_metadata[i]['text'] for i in range(sessions_to_show)]
-                ),
-                # Updated growing tip
-                go.Scatter3d(
-                    x=[tunnel_centerline_x[length-1]],
-                    y=[tunnel_centerline_y[length-1]],
-                    z=[tunnel_centerline_z[length-1]],
-                    mode='markers',
-                    marker=dict(
-                        size=15,
-                        color='rgba(255,100,100,1.0)',
-                        symbol='circle',
-                        line=dict(width=4, color='rgba(255,255,255,1.0)')
-                    ),
-                    name='Growing Tip',
-                    hovertemplate="<b>Tunnel Tip</b><br>Current end of tunnel<extra></extra>",
-                    showlegend=False
-                )
-            ],
-            name=f"frame_{frame_idx}",
-            traces=[0, 1, 2, 3]  # Update all traces
-        )
-        frames.append(frame)
-    
-    fig.frames = frames
-    
-    # 8. Update layout for immersive animated tunnel experience
     fig.update_layout(
-        title=dict(
-            text="Growing Liminal Tunnel Through Semantic Space<br><sub>Watch your 3D tube tunnel form over time through PCA-t-SNE hybrid coordinates</sub>",
-            font=dict(size=18, family='Arial Black'),
-            x=0.5
-        ),
+        title="⚡ Optimized Liminal Tunnel (Fast Mode)",
         scene=dict(
-            xaxis_title="<b>Hybrid Dimension 1</b><br><span style='font-size:12px;'>PCA Global + t-SNE Local</span>",
-            yaxis_title="<b>Hybrid Dimension 2</b><br><span style='font-size:12px;'>Structured + Emergent</span>",
-            zaxis_title="<b>Hybrid Dimension 3</b><br><span style='font-size:12px;'>Linear + Non-linear</span>",
-            camera=dict(
-                eye=dict(x=1.5, y=1.5, z=1.5),
-                center=dict(x=0, y=0, z=0)
-            ),
-            bgcolor='rgba(5,5,15,0.95)',  # Very dark liminal background
-            xaxis=dict(
-                showgrid=True, 
-                gridcolor='rgba(80,40,120,0.3)', 
-                gridwidth=1,
-                backgroundcolor='rgba(5,5,15,0.5)',
-                showbackground=True
-            ),
-            yaxis=dict(
-                showgrid=True, 
-                gridcolor='rgba(80,40,120,0.3)', 
-                gridwidth=1,
-                backgroundcolor='rgba(5,5,15,0.5)',
-                showbackground=True
-            ),
-            zaxis=dict(
-                showgrid=True, 
-                gridcolor='rgba(80,40,120,0.3)', 
-                gridwidth=1,
-                backgroundcolor='rgba(5,5,15,0.5)',
-                showbackground=True
-            ),
-            aspectmode='cube'  # Keep proportions for tunnel
+            bgcolor='rgba(5,5,15,0.95)',
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
         ),
-        updatemenus=[{
-            'type': 'buttons',
-            'showactive': False,
-            'x': 0.1,
-            'y': 0,
-            'buttons': [
-                {
-                    'label': '▶️ Grow Tunnel',
-                    'method': 'animate',
-                    'args': [None, {
-                        'frame': {'duration': 1000, 'redraw': True},
-                        'fromcurrent': True,
-                        'transition': {'duration': 500}
-                    }]
-                },
-                {
-                    'label': '⏸️ Pause',
-                    'method': 'animate',
-                    'args': [[None], {
-                        'frame': {'duration': 0, 'redraw': False},
-                        'mode': 'immediate',
-                        'transition': {'duration': 0}
-                    }]
-                },
-                {
-                    'label': '🔄 Reset',
-                    'method': 'animate',
-                    'args': [['frame_0'], {
-                        'frame': {'duration': 0, 'redraw': True},
-                        'mode': 'immediate',
-                        'transition': {'duration': 0}
-                    }]
-                },
-                {
-                    'label': '⏭️ Full Tunnel',
-                    'method': 'animate',
-                    'args': [[f'frame_{len(frames)-1}'], {
-                        'frame': {'duration': 0, 'redraw': True},
-                        'mode': 'immediate',
-                        'transition': {'duration': 0}
-                    }]
-                }
-            ]
-        }],
-        annotations=[{
-            'text': f'Animation shows {n_frames} growth stages of the tunnel',
-            'showarrow': False,
-            'xref': 'paper', 'yref': 'paper',
-            'x': 0.5, 'y': -0.1,
-            'xanchor': 'center', 'yanchor': 'top',
-            'font': {'size': 12, 'color': 'white'}
-        }],
-        margin=dict(l=0, r=50, b=0, t=80),
-        height=700,
-        showlegend=True,
-        legend=dict(
-            x=0,
-            y=1,
-            bgcolor='rgba(5,5,15,0.8)',
-            bordercolor='rgba(80,40,120,0.5)',
-            borderwidth=1,
-            font=dict(color='white')
-        ),
-        paper_bgcolor='rgba(5,5,15,0.95)',
-        plot_bgcolor='rgba(5,5,15,0.95)'
+        height=600
     )
     
     return fig

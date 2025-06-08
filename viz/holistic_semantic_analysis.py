@@ -926,6 +926,105 @@ def render_holistic_semantic_analysis(memory: List[torch.Tensor], meta: List[Dic
     """
     st.subheader("🌐 Holistic Semantic Analysis - Global Concept Evolution")
     
+    # Add comprehensive interpretation guide
+    with st.expander("📚 **How to Read & Trust This Analysis**", expanded=False):
+        st.markdown("""
+        ### 🔍 **What You're Looking At**
+        
+        The **Holistic Semantic Drift River** transforms your text into flowing 3D rivers where each river represents a **semantic category** that emerges from YOUR specific data.
+        
+        ### 🌊 **Visual Elements Explained**
+        
+        #### **📈 Sharp Lines (River Centerlines)**
+        - **Precise mathematical trajectories** showing how each category evolves over time
+        - **X-axis**: Session progression (time flows left → right)
+        - **Y-axis**: Cumulative semantic flow (rivers stack to show relative importance)
+        - **Z-axis**: Category intensity (height = strength of that theme)
+        
+        #### **☁️ Flowing Surfaces (River "Water")**
+        - **Volumetric semantic density** - thicker areas = stronger category presence
+        - **River width** varies with emergence score (0.5 + 2×intensity)
+        - **Translucent tubes** with 16-point resolution for smooth curves
+        - **NOT uncertainty** - represents category volume/presence
+        
+        #### **💎 Event Markers (Diamonds)**
+        - **📈 Green diamonds** = Semantic surges (>15% increase in category strength)
+        - **📉 Red diamonds** = Semantic declines (>15% decrease in category strength) 
+        - **Positioned above rivers** for visibility
+        
+        ### 🔬 **Mathematical Foundation & Trust Indicators**
+        
+        #### **Data-Driven Category Discovery**
+        ```
+        1. Extract ALL concepts (4+ chars) from your text
+        2. Filter: min 3 total occurrences, must appear in 2+ sessions  
+        3. Create 768-dimensional BERT embeddings for each concept
+        4. Use StandardScaler + clustering (KMeans/Agglomerative)
+        5. Generate category names from most representative concepts
+        ```
+        
+        #### **Emergence Score Calculation**
+        ```
+        For each category C at session t:
+        emergence_score[C][t] = (
+            Σ(min(1.0, frequency/5) for each concept in C)
+        ) / |C|
+        
+        This prevents large categories from dominating and caps individual 
+        concept influence at 5 mentions per session.
+        ```
+        
+        #### **Quality Assurance**
+        - ✅ **No predefined categories** - themes emerge from YOUR data patterns
+        - ✅ **Normalized scoring** prevents frequency bias
+        - ✅ **Multiple clustering algorithms** tested, best selected automatically
+        - ✅ **Minimum thresholds** ensure concept quality
+        - ✅ **Temporal consistency** tracked across all sessions
+        
+        ### 📊 **How to Interpret Results**
+        
+        #### **🌊 River Patterns**
+        - **Rising rivers** = Emerging themes in your thinking
+        - **Declining rivers** = Fading concepts over time  
+        - **Parallel rivers** = Consistent themes throughout
+        - **Converging rivers** = Related concepts appearing together
+        - **River thickness** = How much that theme dominates each session
+        
+        #### **🎨 Color & Size Meanings**
+        - **Line color** = Category identifier (consistent per theme)
+        - **Marker size** = Emergence intensity (8-20px range)
+        - **Marker color** = Viridis scale (dark = low, bright = high emergence)
+        - **River width** = Real-time category strength
+        
+        #### **📈 Trust Your Data When...**
+        - Categories have **meaningful names** that reflect your content
+        - **Multiple concepts** per category (not just 1-2 words)
+        - **Temporal patterns** make sense with your actual experience
+        - **Concept lists** in hover data are relevant to the category name
+        
+        #### **⚠️ Be Cautious When...**
+        - Categories have only 1-2 concepts (may be noise)
+        - Category names seem random or unrelated to your content
+        - Very few sessions (< 5) - patterns may not be reliable
+        - All emergence scores are very low (< 0.1) - weak signal
+        
+        ### 🎯 **Actionable Insights**
+        
+        Use this visualization to:
+        - **Identify recurring themes** in your thinking/writing
+        - **Track concept evolution** over time periods
+        - **Discover unexpected connections** between ideas  
+        - **Understand your semantic patterns** and thinking style
+        - **Find periods of conceptual shift** (marked by diamonds)
+        
+        ### 🧮 **Technical Specifications**
+        - **Embedding Model**: BERT (768 dimensions)
+        - **Clustering**: KMeans/Agglomerative with StandardScaler
+        - **Quality Metrics**: Between-cluster vs within-cluster variance
+        - **Temporal Resolution**: Per-session analysis
+        - **3D Rendering**: Plotly with parametric surface generation
+        """)
+    
     st.info("""
     **🚀 Revolutionary Dynamic Semantic Analysis!**
     
@@ -962,47 +1061,132 @@ def render_holistic_semantic_analysis(memory: List[torch.Tensor], meta: List[Dic
             
             # Step 1: Global concept extraction
             st.markdown("### 🔍 Step 1: Global Concept Extraction")
+            with st.expander("ℹ️ **What's happening here**"):
+                st.markdown("""
+                **Process**: Extracting ALL words (4+ characters) from your entire dataset
+                **Filtering**: Removing 105+ stop words, requiring minimum 3 total occurrences and presence in 2+ sessions
+                **Quality**: Only concepts that appear consistently across multiple sessions are kept
+                """)
+            
             global_concepts = extract_all_concepts_globally(memory, meta)
             
             if not global_concepts:
                 st.error("No concepts could be extracted. Try adjusting parameters.")
                 return
             
-            # Display concept summary
+            # Display concept summary with interpretation
             concept_summary = pd.DataFrame([
                 {
                     'Concept': concept,
                     'Total Frequency': data['total_frequency'],
                     'Sessions': len(set(data['sessions'])),
-                    'Avg per Session': data['total_frequency'] / len(set(data['sessions']))
+                    'Avg per Session': round(data['total_frequency'] / len(set(data['sessions'])), 2),
+                    'Quality Score': round(data['total_frequency'] * len(set(data['sessions'])) / 10, 2)
                 }
                 for concept, data in global_concepts.items()
             ]).sort_values('Total Frequency', ascending=False)
             
+            st.markdown(f"**Found {len(global_concepts)} high-quality concepts** (showing top 20):")
             st.dataframe(concept_summary.head(20), use_container_width=True)
             
             # Step 2: Create embeddings
             st.markdown("### 🧠 Step 2: Concept Embedding Creation")
+            with st.expander("ℹ️ **What's happening here**"):
+                st.markdown("""
+                **Process**: Converting each concept into a 768-dimensional semantic vector using BERT
+                **Purpose**: Creates mathematical representation where similar concepts cluster naturally
+                **Result**: Each concept becomes a point in high-dimensional semantic space
+                """)
             concept_embeddings = create_concept_embeddings(global_concepts)
             
             # Step 3: Find semantic clusters
             st.markdown("### 🔬 Step 3: Semantic Clustering")
+            with st.expander("ℹ️ **What's happening here**"):
+                st.markdown("""
+                **Process**: Using machine learning to find natural groupings in your concepts
+                **Algorithm**: StandardScaler + KMeans/Agglomerative clustering
+                **Selection**: Best clustering method chosen automatically based on cluster quality
+                **Naming**: Categories named dynamically from most representative concepts in each cluster
+                """)
             clusters = find_semantic_clusters(concept_embeddings, global_concepts, n_clusters)
             
-            # Display clusters
+            # Display clusters with quality indicators
+            st.markdown("**🎯 Discovered Categories** (expand to see concepts):")
             for cluster_name, concepts in clusters.items():
-                with st.expander(f"{cluster_name} ({len(concepts)} concepts)"):
+                quality_indicator = "🟢 High Quality" if len(concepts) >= 4 else "🟡 Moderate Quality" if len(concepts) >= 2 else "🔴 Low Quality"
+                with st.expander(f"{cluster_name} ({len(concepts)} concepts) - {quality_indicator}"):
                     st.write(", ".join(concepts))
+                    if len(concepts) < 3:
+                        st.warning("⚠️ Small cluster - interpret results with caution")
             
             # Step 4: Track emergence
             st.markdown("### 📈 Step 4: Category Emergence Tracking")
+            with st.expander("ℹ️ **What's happening here**"):
+                st.markdown("""
+                **Process**: Calculating how strongly each category appears in each session
+                **Formula**: `emergence_score = (Σ normalized_frequencies) / cluster_size`
+                **Normalization**: Caps individual concept influence to prevent bias
+                **Result**: Time series showing category evolution across sessions
+                """)
             category_emergence = track_category_emergence(clusters, global_concepts, memory)
+            
+            # Quality assessment for emergence data
+            avg_emergence = np.mean([np.mean(scores) for scores in category_emergence.values()])
+            max_emergence = max([max(scores) for scores in category_emergence.values()])
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                quality_color = "🟢" if avg_emergence > 0.15 else "🟡" if avg_emergence > 0.05 else "🔴"
+                st.metric("Avg Emergence", f"{avg_emergence:.3f}", help="Higher = stronger signal")
+                st.write(f"{quality_color} Signal Quality")
+            with col2:
+                st.metric("Max Emergence", f"{max_emergence:.3f}", help="Peak category strength")
+            with col3:
+                variance = np.var([max(scores) - min(scores) for scores in category_emergence.values()])
+                st.metric("Temporal Variance", f"{variance:.3f}", help="Higher = more change over time")
             
             # Step 5: Create visualizations based on selection
             if analysis_type == "🌊 Holistic Drift River":
                 st.markdown("### 🌊 Step 5: Holistic Semantic Drift River")
+                
+                # Add river-specific interpretation guide
+                with st.expander("🧭 **How to Read the 3D River**"):
+                    st.markdown("""
+                    **🌊 River Flow Direction**: Time flows from left (early sessions) to right (recent sessions)
+                    **📏 River Height**: Taller rivers = stronger category presence at that time
+                    **🌊 River Width**: Wider tubes = higher emergence intensity 
+                    **🎨 River Color**: Each category has a unique color for identification
+                    **💎 Diamond Events**: Significant increases (green ⬆️) or decreases (red ⬇️) in category strength
+                    **📊 Hover Data**: Click any point for detailed category information
+                    
+                    **🎯 What to Look For**:
+                    - Rising rivers = themes becoming more important to you
+                    - Declining rivers = concepts fading from your focus
+                    - Parallel rivers = consistent themes throughout your data
+                    - Event diamonds = moments of significant conceptual change
+                    """)
+                
                 holistic_river_fig = create_holistic_semantic_drift_river(category_emergence, clusters)
                 st.plotly_chart(holistic_river_fig, use_container_width=True, key="holistic_drift_river")
+                
+                # Add interpretation summary
+                st.markdown("#### 🎯 **Quick Interpretation Guide**")
+                strongest_category = max(category_emergence.items(), key=lambda x: max(x[1]))
+                most_variable = max(category_emergence.items(), key=lambda x: max(x[1]) - min(x[1]))
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info(f"""
+                    **🏆 Strongest Category**: {strongest_category[0]}
+                    Peak emergence: {max(strongest_category[1]):.3f}
+                    This theme dominates your content.
+                    """)
+                with col2:
+                    st.info(f"""
+                    **📈 Most Variable**: {most_variable[0]}
+                    Change range: {max(most_variable[1]) - min(most_variable[1]):.3f}
+                    This theme shows the most evolution over time.
+                    """)
             
             elif analysis_type == "🌐 Concept Network":
                 st.markdown("### 🌐 Step 5: Concept Network Visualization")
@@ -1014,8 +1198,8 @@ def render_holistic_semantic_analysis(memory: List[torch.Tensor], meta: List[Dic
                 emergence_fig = create_category_emergence_plot(category_emergence)
                 st.plotly_chart(emergence_fig, use_container_width=True, key="emergence_plot")
             
-            # Insights summary
-            st.markdown("### 💡 Key Insights")
+            # Enhanced insights summary with trust indicators
+            st.markdown("### 💡 Key Insights & Quality Assessment")
             
             # Find most emergent category
             final_scores = {cat: scores[-1] for cat, scores in category_emergence.items()}
@@ -1034,22 +1218,50 @@ def render_holistic_semantic_analysis(memory: List[torch.Tensor], meta: List[Dic
                 st.metric(
                     "Most Dominant Category",
                     most_emergent[0],
-                    f"{most_emergent[1]:.3f}"
+                    f"{most_emergent[1]:.3f}",
+                    help="Category with highest final emergence score"
                 )
             
             with col2:
                 st.metric(
                     "Highest Growth Category", 
                     highest_growth[0],
-                    f"+{highest_growth[1]:.3f}"
+                    f"+{highest_growth[1]:.3f}",
+                    help="Category showing most increase over time"
                 )
             
             with col3:
                 st.metric(
                     "Total Concepts Analyzed",
                     len(global_concepts),
-                    f"{len(clusters)} categories"
+                    f"{len(clusters)} categories",
+                    help="High-quality concepts meeting minimum thresholds"
                 )
+            
+            # Add data quality assessment
+            st.markdown("#### 🔍 **Data Quality Assessment**")
+            
+            total_concepts = len(global_concepts)
+            avg_concepts_per_category = np.mean([len(concepts) for concepts in clusters.values()])
+            
+            quality_indicators = []
+            if total_concepts >= 20:
+                quality_indicators.append("✅ Sufficient concept diversity")
+            else:
+                quality_indicators.append("⚠️ Limited concept diversity - consider more data")
+                
+            if avg_concepts_per_category >= 3:
+                quality_indicators.append("✅ Well-formed categories")
+            else:
+                quality_indicators.append("⚠️ Small categories - results may be less reliable")
+                
+            if avg_emergence > 0.1:
+                quality_indicators.append("✅ Strong semantic signal")
+            else:
+                quality_indicators.append("⚠️ Weak semantic signal - patterns may be subtle")
+            
+            for indicator in quality_indicators:
+                st.write(indicator)
             
             # Store results in session state
             st.session_state['holistic_analysis'] = {

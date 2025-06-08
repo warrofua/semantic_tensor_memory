@@ -31,6 +31,8 @@ conversations.json
 memory_tensor.pt
 memory_meta.json
 sample_chat_evolution.txt
+test.txt
+test_conversation_chatgpt.json
 
 # Session data files (pickle files)
 *.pkl

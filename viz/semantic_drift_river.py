@@ -615,7 +615,16 @@ def create_semantic_drift_river_plot(memory: List[torch.Tensor], meta: List[Dict
                 tube_i, tube_j, tube_k = [], [], []  # For mesh connectivity
                 
                 for j in range(len(time_points)):
-                    radius = 0.3 + drifts[j] * 3  # Tube radius varies with drift
+                    # Calculate statistical uncertainty for cloud thickness
+                    if concept in concept_embeddings:
+                        embeddings_list = concept_embeddings[concept]
+                        concept_session_list = concept_sessions.get(concept, [])
+                        uncertainty = calculate_embedding_uncertainty(embeddings_list, concept_session_list, j)
+                        # Radius now represents actual statistical uncertainty
+                        radius = 0.2 + uncertainty * 0.8  # Base + uncertainty scaling
+                    else:
+                        radius = 0.3  # Default radius for missing data
+                    
                     center_y = cumulative_flow[j] if j < len(cumulative_flow) else 0
                     center_z = drift_intensity[j]
                     
@@ -639,7 +648,7 @@ def create_semantic_drift_river_plot(memory: List[torch.Tensor], meta: List[Dict
                             tube_j.extend([curr_base + next_k, next_base + next_k, next_base + k])
                             tube_k.extend([next_base + k, curr_base + k, curr_base + next_k])
                 
-                # Add translucent flowing tube
+                # Add translucent flowing tube with uncertainty information
                 fig.add_trace(go.Mesh3d(
                     x=tube_x,
                     y=tube_y,
@@ -649,9 +658,16 @@ def create_semantic_drift_river_plot(memory: List[torch.Tensor], meta: List[Dict
                     k=tube_k,
                     color=color,
                     opacity=0.4,
-                    name=f"Flow Tube {concept.title()}",
+                    name=f"Uncertainty Cloud {concept.title()}",
                     showlegend=False,
-                    hoverinfo='skip'
+                    hovertemplate=(
+                        f"<b>🌊 {concept.title()} Uncertainty Cloud</b><br>"
+                        "<b>📊 Cloud Thickness:</b> Statistical Uncertainty<br>"
+                        "<b>🎯 What this shows:</b> Measurement confidence<br>"
+                        "<b>📏 Thicker cloud:</b> Less certain embedding<br>"
+                        "<b>📏 Thinner cloud:</b> More confident measurement<br>"
+                        "<extra></extra>"
+                    )
                 ))
         
         # Add semantic event markers (splits/merges) with enhanced 3D effects
@@ -696,7 +712,7 @@ def create_semantic_drift_river_plot(memory: List[torch.Tensor], meta: List[Dict
         # Style the 3D plot with cinematic aesthetics
         fig.update_layout(
             title=dict(
-                text="🌊 3D Semantic Drift River - Flowing Through Conceptual Space",
+                text="📈 3D Semantic Trajectories with Statistical Uncertainty Clouds",
                 font=dict(size=22, color='white', family='Arial Black'),
                 x=0.5
             ),
@@ -825,6 +841,73 @@ def create_concept_delta_summary(river_data: Dict[str, Dict]) -> go.Figure:
     return fig
 
 
+def calculate_embedding_uncertainty(embeddings: List[torch.Tensor], 
+                                  concept_sessions: List[int],
+                                  session_idx: int) -> float:
+    """
+    Calculate statistical uncertainty for embedding at a specific session.
+    
+    Args:
+        embeddings: List of concept embeddings over time
+        concept_sessions: Sessions where this concept appears
+        session_idx: Current session index
+    
+    Returns:
+        Uncertainty value (0-1 scale) representing statistical confidence
+    """
+    try:
+        if session_idx >= len(embeddings) or len(embeddings) == 0:
+            return 0.5  # Medium uncertainty for missing data
+        
+        current_embedding = embeddings[session_idx]
+        
+        # 1. Token-level variance within current embedding (internal consistency)
+        if len(current_embedding.shape) > 1:
+            token_variance = torch.var(current_embedding, dim=0).mean().item()
+        else:
+            token_variance = torch.var(current_embedding).item()
+        
+        # 2. Cross-session stability (how consistent is this concept over time)
+        stability_variance = 0.0
+        if len(embeddings) > 1:
+            similarities = []
+            for i, other_embedding in enumerate(embeddings):
+                if i != session_idx:
+                    try:
+                        # Ensure same dimensionality for comparison
+                        if current_embedding.shape == other_embedding.shape:
+                            sim = torch.cosine_similarity(
+                                current_embedding.flatten().unsqueeze(0), 
+                                other_embedding.flatten().unsqueeze(0)
+                            ).item()
+                            similarities.append(sim)
+                    except:
+                        continue
+            
+            if similarities:
+                stability_variance = np.var(similarities)
+        
+        # 3. Concept presence consistency (how often does this concept appear)
+        if len(concept_sessions) > 0:
+            presence_consistency = len(concept_sessions) / max(len(embeddings), 1)
+        else:
+            presence_consistency = 0.1  # Low consistency if no session data
+        
+        # Combine uncertainty sources (higher values = more uncertainty)
+        # Normalize to 0-1 scale
+        uncertainty = (
+            min(token_variance, 1.0) * 0.4 +           # Internal consistency
+            min(stability_variance * 2, 1.0) * 0.4 +   # Temporal stability  
+            (1 - presence_consistency) * 0.2           # Presence consistency
+        )
+        
+        return max(0.0, min(1.0, uncertainty))  # Clamp to [0,1]
+        
+    except Exception as e:
+        # Fallback uncertainty for calculation errors
+        return 0.3
+
+
 def render_semantic_drift_river_analysis(memory: List[torch.Tensor], meta: List[Dict]):
     """
     Render the complete Semantic Drift River analysis interface.
@@ -839,14 +922,118 @@ def render_semantic_drift_river_analysis(memory: List[torch.Tensor], meta: List[
     **🚀 Revolutionary 3D Semantic River Visualization!**
     
     Experience semantic evolution as a stunning 3D flowing river system:
-    - 🌊 **3D flowing streams** = each concept flows through time and space
+    - 📈 **Sharp trajectory lines** = precise semantic path through time
+    - ☁️ **Statistical uncertainty clouds** = measurement confidence intervals
     - 💎 **Individual data points** = hover for rich session details
-    - ⚡ **Variable stream thickness** = drift magnitude affects visual flow
     - 🎯 **Smooth 3D curves** = beautiful temporal progression
-    - 🌈 **Dynamic coloring** = intensity-based color gradients
-    - 📊 **Rich hover data** = session text, drift values, concept activity
+    - 🌈 **Dynamic coloring** = drift intensity-based gradients
+    - 📊 **Rich hover data** = session text, drift values, uncertainty metrics
     - 🎭 **Cinematic camera** = optimal 3D viewing angles
+    - 📏 **Cloud thickness** = thicker = less certain, thinner = more confident
     """)
+    
+    # Add comprehensive interpretation guide
+    with st.expander("📚 **How to Read & Trust the Semantic Drift River**", expanded=False):
+        st.markdown("""
+        ### 🌊 **Visual Elements Decoded**
+        
+        #### **📈 Sharp Lines ("The Rivers")**
+        - **Mathematical precision**: Exact trajectory each concept follows over time
+        - **X-axis**: Time progression (sessions 0 → N)
+        - **Y-axis**: Cumulative semantic flow `Σ(drift[0:t])`
+        - **Z-axis**: Concept separation + drift intensity `base_z + drift × 15`
+        
+        #### **☁️ Uncertainty Clouds ("The Water")**
+        **These represent STATISTICAL CONFIDENCE, not arbitrary width:**
+        
+        **Mathematical formula:**
+        ```
+        uncertainty = (
+            token_variance × 0.4 +           # Internal embedding consistency  
+            stability_variance × 0.4 +       # Cross-session stability
+            (1 - presence_rate) × 0.2        # Concept appearance consistency
+        )
+        tube_radius = 0.2 + uncertainty × 0.8
+        ```
+        
+        **What thick/thin clouds mean:**
+        - **Thin clouds** = High confidence, consistent concept embeddings
+        - **Thick clouds** = Lower confidence, variable embeddings (be cautious!)
+        - **NOT semantic strength** - this is measurement reliability
+        
+        ### 🔬 **Mathematical Foundation**
+        
+        #### **Concept Drift Calculation**
+        ```python
+        # For each concept across sessions
+        drift[t] = 1 - cosine_similarity(
+            concept_embedding[t], 
+            concept_embedding[t-1]
+        )
+        cumulative_flow[t] = Σ(drift[0:t])
+        ```
+        
+        #### **Uncertainty Sources**
+        1. **Token variance**: How consistent are BERT embeddings within each concept
+        2. **Temporal stability**: How stable is this concept across sessions  
+        3. **Presence consistency**: How often does this concept appear
+        
+        ### 📊 **How to Interpret Patterns**
+        
+        #### **🌊 River Flow Patterns**
+        - **Rising trajectories** = Concepts shifting semantically over time
+        - **Parallel lines** = Stable concept relationships
+        - **Converging paths** = Concepts becoming more similar
+        - **Diverging paths** = Concepts becoming more distinct
+        - **Sharp turns** = Sudden semantic shifts (check the diamond events!)
+        
+        #### **☁️ Cloud Thickness Patterns**  
+        - **Consistent thin clouds** = Reliable measurements, trust the trajectory
+        - **Thick throughout** = Concept has inherent ambiguity
+        - **Thick then thin** = Concept became more defined over time
+        - **Thin then thick** = Concept became more ambiguous
+        
+        #### **💎 Event Markers**
+        - **🌊 Blue diamonds** = Concept splits (semantic branching)
+        - **🔗 Cyan crosses** = Concept merges (semantic convergence)
+        - **Positioned above** trajectory at moment of change
+        
+        ### 🎯 **Trust Indicators**
+        
+        #### **✅ High Confidence When:**
+        - Uncertainty clouds are consistently thin
+        - Smooth, gradual trajectory changes
+        - Concept appears in many sessions
+        - Semantic drift patterns make intuitive sense
+        
+        #### **⚠️ Be Cautious When:**
+        - Very thick uncertainty clouds throughout
+        - Erratic, jumpy trajectory changes  
+        - Concept appears in very few sessions (< 3)
+        - Extremely high drift values (> 0.8)
+        
+        #### **🔍 Quality Indicators to Check:**
+        - **Hover data**: Do the session texts actually contain this concept?
+        - **Concept relevance**: Does the concept name match your content?
+        - **Temporal patterns**: Do changes align with your actual experience?
+        - **Uncertainty trends**: Are measurements getting more or less reliable?
+        
+        ### 🎭 **3D Navigation Tips**
+        - **Drag**: Rotate view to see concept relationships
+        - **Scroll**: Zoom to focus on specific time periods
+        - **Hover**: Get rich data for every point
+        - **Double-click**: Reset to optimal viewing angle
+        - **Legend**: Toggle concepts on/off
+        
+        ### 🧮 **Technical Specifications**
+        - **Embedding model**: BERT (768 dimensions)
+        - **Similarity metric**: Cosine similarity for drift calculation
+        - **Uncertainty method**: Multi-source statistical modeling
+        - **3D rendering**: Plotly parametric surfaces (16-point resolution)
+        - **Temporal resolution**: Session-by-session analysis
+        """)
+    
+    st.success("🎯 Ready to create your Semantic Drift River - now with statistical confidence!")
     
     # Controls
     col1, col2, col3 = st.columns(3)

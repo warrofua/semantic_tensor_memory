@@ -248,6 +248,11 @@ class UniversalMemoryStore:
             }
         }
     
+    def clear(self):
+        """Clear all stored embeddings and reset counters."""
+        self.embeddings.clear()
+        self.modality_counts.clear()
+    
     def _save_session(self, embedding: UniversalEmbedding, index: int):
         """Save session to persistent storage."""
         session_file = self.storage_path / f"session_{index:06d}_{embedding.modality.value}.pkl"
