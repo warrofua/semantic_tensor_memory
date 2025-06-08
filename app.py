@@ -1,8 +1,8 @@
 """
-Semantic Tensor Memory Analysis Application
+Universal Multimodal Semantic Tensor Memory Analysis Application
 
-A clean, intuitive Streamlit application for analyzing semantic evolution in text data.
-Redesigned for optimal user experience and workflow.
+A comprehensive Streamlit application for analyzing semantic evolution across multiple modalities.
+Now powered by Universal Multimodal STM architecture.
 """
 
 import streamlit as st
@@ -13,6 +13,18 @@ import io
 import os
 import warnings
 import numpy as np
+from PIL import Image
+from typing import List, Dict, Any, Optional, Tuple, Union
+import torch
+import gc
+import psutil
+from pathlib import Path
+import plotly.graph_objects as go
+import plotly.express as px
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cluster import KMeans
 
 # Fix PyTorch/Streamlit compatibility issues
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -21,10 +33,10 @@ warnings.filterwarnings('ignore', category=UserWarning)
 # Set environment variables to prevent PyTorch/Streamlit conflicts
 os.environ['TORCH_USE_CUDA_DSA'] = '0'
 os.environ['TORCH_DISABLE_WARN'] = '1'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Fix for Universal STM
 
 # Prevent PyTorch from interfering with Streamlit's file watcher
 try:
-    import torch
     torch.set_num_threads(1)
     torch.set_num_interop_threads(1)
     if hasattr(torch, '_C') and hasattr(torch._C, '_disable_jit_profiling'):
@@ -32,10 +44,16 @@ try:
 except Exception:
     pass
 
-# Import our modules
-from memory.embedder import embed_sentence
-from memory.store import save, append
-from memory.drift import drift_series
+# Import Universal Multimodal STM modules
+from memory.universal_core import (
+    UniversalMemoryStore, Modality, create_universal_embedder,
+    embed_text  # Backward compatibility
+)
+from memory.text_embedder import TextEmbedder, create_text_embedding, embed_sentence
+from memory.store import save, append  # Keep legacy store for compatibility
+from memory.drift import drift_series  # Keep legacy drift analysis
+
+# Import visualization modules
 from streamlit_utils import initialize_session_state, robust_pca_pipeline
 from streamlit_plots import (
     plot_drift_plotly, 
@@ -54,6 +72,9 @@ from streamlit_plots import (
 from viz.semantic_drift_river import render_semantic_drift_river_analysis
 from viz.holistic_semantic_analysis import render_holistic_semantic_analysis
 from chat_analysis import render_comprehensive_chat_analysis
+# Chat history analysis (unified with main processing)
+from chat_history_analyzer import ChatHistoryParser
+
 from semantic_trajectory import (
     calculate_semantic_trajectory_data,
     create_3d_trajectory_plot,
@@ -62,109 +83,566 @@ from semantic_trajectory import (
 from alternative_dimensionality import compare_dimensionality_methods, create_alternative_visualization
 from viz.pca_summary import generate_narrative_summary
 
+# Add performance optimizer import at the top
+from performance_optimizer import (
+    AdaptiveDataProcessor, 
+    ProgressiveAnalyzer, 
+    create_performance_dashboard,
+    DatasetProfile,
+    PerformanceMetrics
+)
+from explainability_engine import ExplainabilityEngine, create_explanation_dashboard
+
 # Set page config
 st.set_page_config(
-    page_title="Semantic Tensor Memory",
-    page_icon="🧠",
+    page_title="Universal Multimodal STM",
+    page_icon="🌐",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Initialize session state
-initialize_session_state()
-
-
-def handle_csv_import(uploaded_file):
-    """Handle CSV file upload and import with clean feedback."""
+# Memory management utilities
+def get_memory_usage() -> float:
+    """Get current memory usage in MB."""
     try:
-        memory = []
-        meta = []
-        csv_data = uploaded_file.read().decode('utf-8')
-        reader = csv.DictReader(io.StringIO(csv_data))
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024  # Convert to MB
+    except:
+        return 0.0
+
+def cleanup_memory():
+    """Force memory cleanup and garbage collection."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+# CRITICAL PERFORMANCE FIX: Model caching
+@st.cache_resource
+def get_cached_text_embedder():
+    """Get cached TextEmbedder to prevent reloading 1GB models for every CSV import."""
+    st.info("🔄 Loading embedding models (this happens once per session)...")
+    embedder = TextEmbedder()
+    st.success("✅ Models loaded and cached!")
+    return embedder
+
+@st.cache_resource  
+def get_cached_universal_store():
+    """Get cached UniversalMemoryStore."""
+    return UniversalMemoryStore()
+
+# Initialize session state with Universal STM support and memory management
+def initialize_universal_session_state():
+    """Initialize session state with Universal Multimodal STM support and memory management."""
+    initialize_session_state()  # Call original initialization
+    
+    # Memory monitoring
+    if 'initial_memory' not in st.session_state:
+        st.session_state.initial_memory = get_memory_usage()
+    
+    # Add Universal STM components with size limits (use cached version)
+    if 'universal_store' not in st.session_state:
+        st.session_state.universal_store = get_cached_universal_store()
+    
+    if 'active_modalities' not in st.session_state:
+        st.session_state.active_modalities = set()
+    
+    if 'modality_sessions' not in st.session_state:
+        st.session_state.modality_sessions = {modality: [] for modality in Modality}
+    
+    # Periodic memory cleanup
+    current_memory = get_memory_usage()
+    if current_memory > st.session_state.initial_memory + 2000:  # 2GB threshold
+        st.warning(f"🧠 Memory usage high ({current_memory:.0f}MB). Running cleanup...")
+        cleanup_memory()
+
+initialize_universal_session_state()
+
+
+def detect_file_type_and_content(uploaded_file):
+    """
+    Intelligently detect file type and content format.
+    
+    Returns:
+        tuple: (file_type, content_type) where:
+        - file_type: 'csv', 'json', 'txt' 
+        - content_type: 'ai_conversation', 'csv_sessions', 'unknown'
+    """
+    file_name = uploaded_file.name.lower()
+    
+    # Read content to analyze
+    content = uploaded_file.read()
+    uploaded_file.seek(0)  # Reset file pointer
+    
+    try:
+        content_str = content.decode('utf-8')
+    except:
+        return 'unknown', 'unknown'
+    
+    # File extension detection
+    if file_name.endswith('.csv'):
+        # Check if it's a CSV with text column (traditional) or conversation-like
+        try:
+            import csv
+            import io
+            csv_reader = csv.DictReader(io.StringIO(content_str))
+            first_row = next(csv_reader, {})
+            
+            if 'text' in first_row:
+                return 'csv', 'csv_sessions'
+            else:
+                return 'csv', 'unknown'
+        except:
+            return 'csv', 'unknown'
+    
+    elif file_name.endswith('.json'):
+        # Check if it looks like AI conversation JSON
+        try:
+            import json
+            data = json.loads(content_str)
+            
+            # ChatGPT format detection
+            if isinstance(data, list) or ('mapping' in data if isinstance(data, dict) else False):
+                return 'json', 'ai_conversation'
+            else:
+                return 'json', 'unknown'
+        except:
+            return 'json', 'unknown'
+    
+    elif file_name.endswith('.txt'):
+        # Analyze text content for conversation patterns
+        lines = content_str.split('\n')
+        conversation_indicators = 0
         
-        # Process with progress
-        rows = list(reader)
-        if not rows:
-            st.error("❌ The CSV file appears to be empty")
-            return False
-            
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        # Look for conversation patterns
+        for line in lines[:20]:  # Check first 20 lines
+            line_lower = line.strip().lower()
+            if any(pattern in line_lower for pattern in [
+                'you:', 'user:', 'human:', 'assistant:', 'ai:', 'chatgpt:', 'claude:',
+                '**you**:', '**assistant**:', '> '
+            ]):
+                conversation_indicators += 1
         
-        valid_sessions = 0
-        for i, row in enumerate(rows):
-            progress_bar.progress((i + 1) / len(rows))
-            status_text.text(f"Processing row {i + 1} of {len(rows)}...")
-            
-            text = row.get('text', '').strip()
-            if text:
-                try:
-                    emb = embed_sentence(text)
-                    meta_row = dict(row)
-                    meta_row['tokens'] = emb.shape[0]
-                    memory.append(emb)
-                    meta.append(meta_row)
-                    valid_sessions += 1
-                except Exception:
-                    continue  # Skip problematic rows silently
-        
-        progress_bar.empty()
-        status_text.empty()
-        
-        if memory:
-            # Update session state
-            st.session_state.memory = memory
-            st.session_state.meta = meta
-            
-            # Update dataset info
-            st.session_state.dataset_info = {
-                'source': 'csv_import',
-                'filename': uploaded_file.name,
-                'upload_timestamp': time.time(),
-                'session_count': len(memory),
-                'total_tokens': sum(m.shape[0] for m in memory)
-            }
-            
-            # Save the data
-            save(memory, meta)
-            
-            st.success(f"✅ Successfully loaded **{uploaded_file.name}** with {len(memory)} sessions")
-            return True
+        if conversation_indicators >= 2:
+            return 'txt', 'ai_conversation'
         else:
-            st.error(f"❌ No valid text data found in {uploaded_file.name}")
+            return 'txt', 'unknown'
+    
+    return 'unknown', 'unknown'
+
+
+def convert_ai_conversation_to_sessions(messages):
+    """
+    Convert AI conversation messages to CSV-like session format.
+    
+    Args:
+        messages: List of ChatMessage objects
+        
+    Returns:
+        List of dict objects compatible with CSV processing
+    """
+    sessions = []
+    
+    # Filter to user messages only (focus on user's evolution)
+    user_messages = [msg for msg in messages if msg.role == 'user']
+    
+    for i, msg in enumerate(user_messages):
+        session_data = {
+            'text': msg.content,
+            'session_id': i,
+            'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
+            'conversation_id': msg.conversation_id or 'unknown',
+            'message_id': msg.message_id or f'msg_{i}',
+            'source_type': 'ai_conversation',
+            'role': msg.role
+        }
+        sessions.append(session_data)
+    
+    return sessions
+
+
+def handle_unified_upload(uploaded_file):
+    """
+    Unified handler that processes both AI conversations and CSV data intelligently.
+    """
+    try:
+        # Detect what we're dealing with
+        file_type, content_type = detect_file_type_and_content(uploaded_file)
+        
+        st.info(f"🔍 Detected: {file_type.upper()} file with {content_type.replace('_', ' ')}")
+        
+        if content_type == 'ai_conversation':
+            # Process as AI conversation
+            with st.spinner("🤖 Processing AI conversation data..."):
+                file_content = uploaded_file.read().decode('utf-8')
+                
+                # Parse messages using existing chat parser
+                from chat_history_analyzer import ChatHistoryParser
+                messages = ChatHistoryParser.auto_detect_format(file_content)
+                
+                if not messages:
+                    st.error("❌ No conversation messages found in the uploaded file")
+                    return False
+                
+                # Convert to session format
+                session_data = convert_ai_conversation_to_sessions(messages)
+                
+                if len(session_data) < 2:
+                    st.error("❌ Need at least 2 user messages for analysis")
+                    return False
+                
+                st.success(f"✅ Extracted {len(session_data)} user messages from conversation")
+                
+        elif content_type == 'csv_sessions':
+            # Process as traditional CSV
+            with st.spinner("📊 Processing CSV session data..."):
+                csv_data = uploaded_file.read().decode('utf-8')
+                import csv
+                import io
+                reader = csv.DictReader(io.StringIO(csv_data))
+                session_data = list(reader)
+                
+                if not session_data:
+                    st.error("❌ The CSV file appears to be empty")
+                    return False
+                    
+                # Validate text column
+                text_found = any('text' in row and row['text'].strip() for row in session_data)
+                if not text_found:
+                    st.error("❌ No 'text' column with content found in CSV")
+                    return False
+                    
+                st.success(f"✅ Loaded {len(session_data)} sessions from CSV")
+                
+        else:
+            st.error(f"❌ Unsupported file format. Please upload:")
+            st.markdown("""
+            - **CSV files** with a 'text' column
+            - **JSON files** from ChatGPT exports  
+            - **TXT files** with conversation format
+            """)
             return False
+        
+        # Now process the unified session data
+        return process_unified_sessions(session_data, uploaded_file.name, content_type)
         
     except Exception as e:
         st.error(f"❌ Failed to process {uploaded_file.name}: {str(e)}")
         return False
 
 
+def process_unified_sessions(session_data, filename, content_type):
+    """
+    Process unified session data with adaptive performance optimization.
+    """
+    try:
+        # ENHANCED: Use adaptive data processor
+        adaptive_processor = AdaptiveDataProcessor()
+        
+        # Profile the dataset first
+        profile = adaptive_processor.profile_dataset(session_data)
+        
+        # Show dataset profile to user
+        st.info(f"""
+        📊 **Dataset Analysis**:
+        - **{profile.total_sessions:,} sessions** (~{profile.avg_tokens_per_session} tokens each)
+        - **Complexity Score**: {profile.complexity_score:.2f}/1.0
+        - **Strategy**: {profile.processing_strategy.replace('_', ' ').title()}
+        - **Estimated Memory**: {profile.estimated_memory_mb:.0f}MB
+        """)
+        
+        # Apply intelligent processing strategy
+        if profile.processing_strategy == "progressive_sampling":
+            st.warning(f"🎯 **Large Dataset Detected**: Using intelligent sampling for optimal performance")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button(f"🔬 Smart Sample ({profile.recommended_batch_size} sessions)", type="primary"):
+                    session_data, selected_indices = adaptive_processor.apply_intelligent_sampling(
+                        session_data, profile.recommended_batch_size
+                    )
+                    st.success(f"✅ Applied intelligent sampling: {len(session_data)} sessions selected")
+                else:
+                    return False
+            
+            with col2:
+                if st.button(f"📊 Process First {profile.recommended_batch_size}"):
+                    session_data = session_data[:profile.recommended_batch_size]
+                    selected_indices = list(range(profile.recommended_batch_size))
+                    st.info(f"✅ Processing first {len(session_data)} sessions")
+                else:
+                    return False
+            
+            with col3:
+                if st.button("🔄 Cancel & Try Smaller File"):
+                    st.info("Consider splitting your data or using the sampling option")
+                    return False
+            
+            return False
+        
+        elif profile.processing_strategy == "smart_batching":
+            st.info(f"🔄 **Smart Batching**: Processing in optimized batches of {profile.recommended_batch_size}")
+        
+        else:
+            st.success(f"✅ **Full Processing**: Dataset size is optimal for direct processing")
+        
+        # Initialize performance tracking
+        start_time = time.time()
+        start_memory = get_memory_usage()
+        
+        memory = []  # Legacy format for backward compatibility
+        meta = []
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        performance_metrics = st.empty()
+        
+        # PERFORMANCE FIX: Use cached models
+        text_embedder = get_cached_text_embedder()
+        universal_store = get_cached_universal_store()
+        
+        # Clear any existing data to prevent accumulation
+        universal_store.clear()
+        
+        valid_sessions = 0
+        skipped_sessions = 0
+        
+        # Use adaptive batch size
+        batch_size = min(profile.recommended_batch_size, 50)  # Cap at 50 for UI responsiveness
+        
+        # Enhanced memory monitoring
+        memory_threshold = min(2000, int(adaptive_processor.available_memory_gb * 1024 * 0.5))  # Use 50% of available memory
+        
+        # Processing quality tracking
+        processing_quality = {
+            'successful_embeddings': 0,
+            'failed_embeddings': 0,
+            'avg_processing_time': 0,
+            'memory_efficiency': 0
+        }
+        
+        for batch_start in range(0, len(session_data), batch_size):
+            batch_end = min(batch_start + batch_size, len(session_data))
+            batch = session_data[batch_start:batch_end]
+            
+            batch_start_time = time.time()
+            
+            # ENHANCED MEMORY CHECK with adaptive thresholds
+            current_memory = get_memory_usage()
+            memory_usage_pct = (current_memory / (adaptive_processor.system_memory_gb * 1024)) * 100
+            
+            if current_memory > memory_threshold or memory_usage_pct > 70:
+                st.warning(f"⚠️ High memory usage: {current_memory:.0f}MB ({memory_usage_pct:.1f}% of system)")
+                cleanup_memory()
+                
+                # If still high, suggest reducing batch size
+                if get_memory_usage() > memory_threshold * 0.9:
+                    batch_size = max(5, batch_size // 2)
+                    st.info(f"🔧 Auto-reducing batch size to {batch_size} for memory efficiency")
+            
+            # Process batch with error resilience
+            batch_successes = 0
+            for i, row in enumerate(batch):
+                global_i = batch_start + i
+                text = row.get('text', '').strip()
+                
+                if text:
+                    try:
+                        # PERFORMANCE FIX: Single embedding call
+                        session_id = f"session_{valid_sessions}"
+                        universal_embedding = text_embedder.process_raw_data(text, session_id=session_id)
+                        
+                        # Extract legacy format from universal embedding
+                        legacy_emb = universal_embedding.event_embeddings
+                        meta_row = dict(row)
+                        meta_row['tokens'] = legacy_emb.shape[0]
+                        meta_row['content_type'] = content_type
+                        meta_row['processing_batch'] = batch_start // batch_size
+                        
+                        # Store both formats
+                        memory.append(legacy_emb)
+                        meta.append(meta_row)
+                        universal_store.add_session(universal_embedding)
+                        
+                        # Track modality
+                        st.session_state.active_modalities.add(Modality.TEXT)
+                        st.session_state.modality_sessions[Modality.TEXT].append({
+                            'session_id': session_id,
+                            'text': text,
+                            'meta': meta_row,
+                            'index': valid_sessions
+                        })
+                        
+                        valid_sessions += 1
+                        batch_successes += 1
+                        processing_quality['successful_embeddings'] += 1
+                        
+                    except Exception as e:
+                        skipped_sessions += 1
+                        processing_quality['failed_embeddings'] += 1
+                        if skipped_sessions <= 5:
+                            status_text.text(f"⚠️ Skipping row {global_i + 1}: {str(e)}")
+                        continue
+                else:
+                    skipped_sessions += 1
+            
+            # Calculate batch performance metrics
+            batch_time = time.time() - batch_start_time
+            batch_efficiency = batch_successes / len(batch) if batch else 0
+            
+            # Update progress with enhanced metrics
+            progress_pct = batch_end / len(session_data)
+            progress_bar.progress(progress_pct)
+            
+            current_memory = get_memory_usage()
+            elapsed_time = time.time() - start_time
+            estimated_total_time = elapsed_time / progress_pct if progress_pct > 0 else 0
+            eta = estimated_total_time - elapsed_time if estimated_total_time > elapsed_time else 0
+            
+            # Enhanced status display
+            status_text.markdown(f"""
+            **Processing Batch {batch_start // batch_size + 1}**: {batch_start + 1}-{batch_end} of {len(session_data)}
+            - ✅ **Sessions**: {valid_sessions} processed, {skipped_sessions} skipped
+            - 🧠 **Memory**: {current_memory:.0f}MB ({(current_memory/start_memory-1)*100:+.0f}%)
+            - ⏱️ **Time**: {elapsed_time:.1f}s elapsed, ~{eta:.0f}s remaining
+            - 📊 **Batch Efficiency**: {batch_efficiency:.1%}
+            """)
+            
+            # Real-time performance metrics display
+            with performance_metrics.container():
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Progress", f"{progress_pct:.1%}")
+                with col2:
+                    st.metric("Memory Usage", f"{current_memory:.0f}MB", 
+                             f"{current_memory-start_memory:+.0f}MB")
+                with col3:
+                    st.metric("Processing Rate", f"{valid_sessions/elapsed_time:.1f}/s")
+                with col4:
+                    success_rate = processing_quality['successful_embeddings'] / max(1, processing_quality['successful_embeddings'] + processing_quality['failed_embeddings'])
+                    st.metric("Success Rate", f"{success_rate:.1%}")
+            
+            time.sleep(0.01)  # Brief pause for UI responsiveness
+        
+        # Clear progress displays
+        progress_bar.empty()
+        status_text.empty()
+        performance_metrics.empty()
+        
+        if memory:
+            # Calculate final performance metrics
+            total_time = time.time() - start_time
+            final_memory = get_memory_usage()
+            memory_efficiency = len(memory) / (final_memory - start_memory) if final_memory > start_memory else 1
+            
+            # Update session state
+            st.session_state.memory = memory
+            st.session_state.meta = meta
+            st.session_state.universal_store = universal_store
+            
+            # Enhanced dataset info with performance metrics
+            st.session_state.dataset_info = {
+                'source': content_type,
+                'filename': filename,
+                'upload_timestamp': time.time(),
+                'session_count': len(memory),
+                'total_tokens': sum(m.shape[0] for m in memory),
+                'universal_sessions': len(universal_store.embeddings),
+                'active_modalities': list(st.session_state.active_modalities),
+                'memory_usage': final_memory,
+                'processing_time': total_time,
+                'processing_strategy': profile.processing_strategy,
+                'complexity_score': profile.complexity_score,
+                'performance_metrics': {
+                    'sessions_per_second': len(memory) / total_time,
+                    'memory_efficiency': memory_efficiency,
+                    'success_rate': processing_quality['successful_embeddings'] / max(1, valid_sessions + skipped_sessions),
+                    'estimated_quality': min(1.0, success_rate * memory_efficiency)
+                }
+            }
+            
+            # Save the data (legacy)
+            save(memory, meta)
+            
+            # Show performance summary
+            st.success(f"""
+            🎉 **Processing Complete!**
+            - **Processed**: {valid_sessions:,} sessions in {total_time:.1f}s
+            - **Performance**: {len(memory)/total_time:.1f} sessions/second
+            - **Memory**: {final_memory:.0f}MB final ({final_memory-start_memory:+.0f}MB change)
+            - **Quality**: {processing_quality['successful_embeddings']/(valid_sessions+skipped_sessions):.1%} success rate
+            """)
+            
+            # Show processing strategy results
+            if profile.processing_strategy != "full_processing":
+                st.info(f"🎯 **Strategy: {profile.processing_strategy.replace('_', ' ').title()}** - Optimized for your system capabilities")
+            
+            # Performance warning if needed
+            memory_increase = final_memory - start_memory
+            if memory_increase > 1000:  # 1GB increase
+                st.warning(f"📊 High memory usage: +{memory_increase:.0f}MB. Consider using sampling for larger datasets.")
+            elif processing_quality['successful_embeddings'] / max(1, valid_sessions + skipped_sessions) < 0.8:
+                st.warning(f"⚠️ Lower success rate ({processing_quality['successful_embeddings']/(valid_sessions+skipped_sessions):.1%}). Check data quality.")
+            
+            return True
+        else:
+            st.error(f"❌ No valid text data found in {filename}")
+            return False
+        
+    except Exception as e:
+        st.error(f"❌ Failed to process session data: {str(e)}")
+        # Force cleanup on error
+        cleanup_memory()
+        return False
+
+
 def render_upload_screen():
-    """Render the clean upload interface for new users."""
+    """Render the unified upload interface."""
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0;">
-        <h1>🧠 Semantic Tensor Memory</h1>
-        <h3 style="color: #666;">Analyze how meaning evolves across text sessions</h3>
+        <h1>🌐 Universal Multimodal STM</h1>
+        <h3 style="color: #666;">Analyze how meaning evolves across conversations and sessions</h3>
     </div>
     """, unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("### 📁 Upload Your Data")
-        st.markdown("Upload a CSV file with a **'text'** column containing your sessions, documents, or journal entries.")
+        # Unified Upload Section  
+        st.markdown("### 📁 **Upload Your Data**")
+        st.markdown("Upload **any** text-based data for semantic analysis - we'll detect the format automatically!")
         
+        # Enhanced file uploader that accepts multiple formats
         uploaded_file = st.file_uploader(
-            "Choose CSV file",
-            type=['csv'],
-            help="CSV should have a 'text' column with your text data"
+            "Choose your file",
+            type=['csv', 'json', 'txt'],
+            help="Supports: CSV files, ChatGPT/AI conversation exports (JSON/TXT), or any text data"
         )
         
         if uploaded_file is not None:
-            if handle_csv_import(uploaded_file):
+            if handle_unified_upload(uploaded_file):
                 st.rerun()
 
         st.markdown("---")
+        
+        # Format examples
+        with st.expander("📋 **Supported Formats**"):
+            st.markdown("""
+            ### 🤖 **AI Conversations**
+            - **ChatGPT JSON exports** (conversations.json)
+            - **Claude/AI text conversations** (copy-pasted chats)
+            - **Any conversation format** with User:/Assistant: patterns
+            
+            ### 📊 **Traditional Data**  
+            - **CSV files** with a 'text' column
+            - **Journal entries, documents, surveys**
+            - **Any structured text data**
+            
+            ### 🧠 **Auto-Detection**
+            Our system automatically detects:
+            - File format (CSV, JSON, TXT)
+            - Content type (AI conversation vs. traditional sessions)
+            - Optimal processing method for your specific data
+            """)
         
         # Example datasets
         st.markdown("### 🎯 Try Example Datasets")
@@ -173,23 +651,26 @@ def render_upload_screen():
             # Check if demo dataset exists
             if os.path.exists("demo_dataset.csv"):
                 with open("demo_dataset.csv", "rb") as f:
-                    if handle_csv_import(type('MockFile', (), {
+                    mock_file = type('MockFile', (), {
                         'name': 'demo_dataset.csv',
-                        'read': lambda: f.read()
-                    })()):
+                        'read': lambda: f.read(),
+                        'seek': lambda x: None
+                    })()
+                    if handle_unified_upload(mock_file):
                         st.rerun()
             else:
-                st.error("Demo dataset not found. Please upload your own CSV file.")
+                st.error("Demo dataset not found. Please upload your own file.")
         
         st.markdown("""
         <div style="background: #f0f2f6; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
         <strong>💡 What can you analyze?</strong>
         <ul>
-        <li>📝 Journal entries over time</li>
-        <li>📚 Document evolution in a project</li>
-        <li>💬 Chat conversations or interviews</li>
-        <li>📊 Survey responses across periods</li>
-        <li>🎓 Learning journey documentation</li>
+        <li>🤖 <strong>AI Conversations</strong>: ChatGPT, Claude, or any AI chat history</li>
+        <li>📝 <strong>Journal entries</strong> over time</li>
+        <li>📚 <strong>Document evolution</strong> in a project</li>
+        <li>💬 <strong>Chat conversations</strong> or interviews</li>
+        <li>📊 <strong>Survey responses</strong> across periods</li>
+        <li>🎓 <strong>Learning journey</strong> documentation</li>
         </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -222,139 +703,275 @@ def render_simple_sidebar():
         # Show preferred dimensionality method
         preferred_method = st.session_state.get('preferred_method')
         if preferred_method:
-            st.markdown("---")
             st.markdown("**📐 Preferred Method:**")
             st.markdown(f"🎯 {preferred_method.upper()}")
             st.caption("Set in Dimensionality tab")
 
 
 def render_overview_dashboard():
-    """Render the main overview dashboard with key insights."""
+    """Render an enhanced overview dashboard with meaningful concept-level insights and performance metrics."""
     dataset_info = st.session_state.get('dataset_info', {})
     filename = dataset_info.get('filename', 'Unknown Dataset')
     session_count = dataset_info.get('session_count', 0)
+    source_type = dataset_info.get('source', 'unknown')
     
-    # Header
-    st.markdown(f"# 🧠 {filename}")
+    # Header with better styling and source indicator
+    icon = "🤖" if source_type == 'ai_conversation' else "📊"
+    source_label = "AI Conversation Analysis" if source_type == 'ai_conversation' else "Semantic Analysis Overview"
     
-    # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
+    st.markdown(f"""
+    <div style="text-align: center; padding: 1rem 0;">
+        <h1>{icon} {filename}</h1>
+        <h3 style="color: #666;">{source_label}</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        st.metric("📊 Sessions", session_count)
+    # Performance Metrics Dashboard (if available)
+    if 'performance_metrics' in dataset_info:
+        performance = dataset_info['performance_metrics']
+        processing_time = dataset_info.get('processing_time', 0)
+        memory_usage = dataset_info.get('memory_usage', 0)
+        processing_strategy = dataset_info.get('processing_strategy', 'full_processing')
+        complexity_score = dataset_info.get('complexity_score', 0)
+        
+        # Performance Summary Card
+        with st.expander("📊 **Processing Performance Summary**", expanded=False):
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("⚡ Processing Speed", f"{performance['sessions_per_second']:.1f}/s",
+                         help="Sessions processed per second")
+            
+            with col2:
+                st.metric("🧠 Memory Efficiency", f"{performance['memory_efficiency']:.1f}",
+                         help="Sessions per MB of memory used")
+            
+            with col3:
+                st.metric("✅ Success Rate", f"{performance['success_rate']:.1%}",
+                         help="Percentage of sessions successfully processed")
+            
+            with col4:
+                st.metric("🎯 Quality Score", f"{performance['estimated_quality']:.1%}",
+                         help="Overall processing quality estimate")
+            
+            # Processing details
+            st.markdown("---")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown(f"**⏱️ Total Time**: {processing_time:.1f}s")
+                st.markdown(f"**🔧 Strategy**: {processing_strategy.replace('_', ' ').title()}")
+            
+            with col2:
+                st.markdown(f"**💾 Memory Usage**: {memory_usage:.0f}MB")
+                st.markdown(f"**📊 Dataset Complexity**: {complexity_score:.2f}/1.0")
+            
+            with col3:
+                # Quality assessment
+                if performance['estimated_quality'] > 0.8:
+                    quality_status = "🟢 Excellent"
+                elif performance['estimated_quality'] > 0.6:
+                    quality_status = "🟡 Good"
+                else:
+                    quality_status = "🔴 Needs Review"
+                st.markdown(f"**Quality Status**: {quality_status}")
+                
+                # Strategy recommendation
+                if processing_strategy == "progressive_sampling":
+                    st.markdown("**🎯 Used Smart Sampling** for large dataset")
+                elif processing_strategy == "smart_batching":
+                    st.markdown("**🔄 Used Adaptive Batching** for efficiency")
+                else:
+                    st.markdown("**✅ Full Processing** completed")
     
-    with col2:
-        total_tokens = dataset_info.get('total_tokens', 0)
-        st.metric("🔤 Total Tokens", f"{total_tokens:,}")
+    # Show special indicator for AI conversations
+    if source_type == 'ai_conversation':
+        st.info("🤖 **AI Conversation Detected**: Analyzing your message evolution across AI interactions")
     
-    with col3:
-        avg_tokens = total_tokens / max(session_count, 1)
-        st.metric("📏 Avg Length", f"{avg_tokens:.0f}")
+    if session_count < 2:
+        st.info("📊 Upload at least 2 sessions to see meaningful semantic analysis.")
+        return
     
-    with col4:
-        # Quick semantic shift calculation
-        if len(st.session_state.memory) > 1:
+    # Quick Auto-Analysis Section
+    st.markdown("### 🚀 Quick Semantic Insights")
+    
+        # Try to generate quick concept analysis
+    if st.button("🔍 Generate Quick Analysis", type="primary", key="quick_analysis_btn"):
+        with st.spinner("🧠 Analyzing your semantic patterns..."):
             try:
-                drifts, _ = drift_series(st.session_state.memory)
-                avg_drift = np.mean(drifts)
-                st.metric("🌊 Avg Drift", f"{avg_drift:.3f}")
-            except:
-                st.metric("🌊 Avg Drift", "N/A")
-        else:
-            st.metric("🌊 Avg Drift", "N/A")
+                # Quick concept analysis with fewer clusters for overview
+                from analysis.concept_analysis import ConceptAnalyzer
+                from memory.universal_core import UniversalMemoryStore
+                from memory.text_embedder import TextEmbedder
+                
+                # PERFORMANCE FIX: Use cached models for quick analysis
+                if 'quick_analysis_store' not in st.session_state:
+                    st.session_state.quick_analysis_store = get_cached_universal_store()
+                    st.session_state.quick_analysis_embedder = get_cached_text_embedder()
+                else:
+                    # Clear previous data but reuse cached models
+                    st.session_state.quick_analysis_store = get_cached_universal_store()
+                
+                universal_store = st.session_state.quick_analysis_store
+                text_embedder = st.session_state.quick_analysis_embedder
+                
+                # Process sample of sessions for quick analysis
+                sample_size = min(20, len(st.session_state.memory))
+                memory_sample = st.session_state.memory[-sample_size:]  # Recent sessions
+                
+                for i, session_text in enumerate(memory_sample):
+                    # Get original text from meta if available
+                    if i < len(st.session_state.meta):
+                        meta_text = st.session_state.meta[i].get('text', str(session_text))
+                    else:
+                        meta_text = str(session_text)
+                    
+                    embedding = text_embedder.process_raw_data(
+                        meta_text, 
+                        session_id=f"overview_session_{i}"
+                    )
+                    universal_store.add_session(embedding)
+                
+                # Quick analysis
+                analyzer = ConceptAnalyzer(universal_store)
+                concept_evolution = analyzer.analyze_complete_concept_evolution(n_clusters=3)
+                
+                # Store for reuse
+                st.session_state.overview_concept_analysis = concept_evolution
+                
+            except Exception as e:
+                st.error(f"Quick analysis failed: {str(e)}")
+                concept_evolution = None
     
-    st.markdown("---")
-    
-    # Main visualizations (2 columns)
-    if len(st.session_state.memory) > 1:
-        col1, col2 = st.columns(2)
+    # Display analysis if available
+    if hasattr(st.session_state, 'overview_concept_analysis'):
+        concept_evolution = st.session_state.overview_concept_analysis
+        
+        # Key Insights Cards
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.subheader("📈 Semantic Evolution")
-            try:
-                drifts, counts = drift_series(st.session_state.memory)
-                fig = plot_drift_plotly(drifts, counts)
-                st.plotly_chart(fig, use_container_width=True, key="overview_drift_plot")
-            except Exception as e:
-                st.error(f"Could not generate drift plot: {e}")
+            st.metric("📊 Sessions Analyzed", concept_evolution.total_sessions)
         
         with col2:
-            st.subheader("🗺️ Semantic Space")
-            try:
-                # Check if user has a preferred method from comparison
-                if 'preferred_method' in st.session_state and 'method_results' in st.session_state:
-                    preferred_method = st.session_state['preferred_method']
-                    method_results = st.session_state['method_results']
-                    
-                    if preferred_method == 'umap' and method_results.get('umap_results'):
-                        fig = create_alternative_visualization(
-                            method_results['umap_results'], 
-                            st.session_state.meta, 
-                            "UMAP"
-                        )
-                        if fig:
-                            st.plotly_chart(fig, use_container_width=True, key="overview_umap_plot")
-                            st.caption("🎯 Using UMAP (your preferred method)")
-                        else:
-                            # Fallback to PCA
-                            results = robust_pca_pipeline(
-                                st.session_state.memory, 
-                                st.session_state.meta, 
-                                n_components=2,
-                                method='auto'
-                            )
-                            if results:
-                                fig = create_pca_visualization(results, st.session_state.meta, is_3d=False)
-                                st.plotly_chart(fig, use_container_width=True, key="overview_pca_plot")
-                                st.caption("📊 Using PCA (fallback)")
-                    else:
-                        # For t-SNE or other methods, fallback to PCA for now
-                        results = robust_pca_pipeline(
-                            st.session_state.memory, 
-                            st.session_state.meta, 
-                            n_components=2,
-                            method='auto'
-                        )
-                        if results:
-                            fig = create_pca_visualization(results, st.session_state.meta, is_3d=False)
-                            st.plotly_chart(fig, use_container_width=True, key="overview_pca_plot")
-                            st.caption(f"📊 Using PCA (preferred {preferred_method.upper()} not available in 2D overview)")
-                else:
-                    # Default PCA visualization
-                    results = robust_pca_pipeline(
-                        st.session_state.memory, 
-                        st.session_state.meta, 
-                        n_components=2,
-                        method='auto'
-                    )
-                    if results:
-                        fig = create_pca_visualization(results, st.session_state.meta, is_3d=False)
-                        st.plotly_chart(fig, use_container_width=True, key="overview_pca_plot")
-                        st.caption("📊 Using PCA (default)")
-                    else:
-                        st.error("Could not generate PCA visualization")
-            except Exception as e:
-                st.error(f"Could not generate plot: {e}")
+            st.metric("🎯 Main Concepts", len(concept_evolution.concept_clusters))
         
-        # Quick insights
-        st.subheader("🔍 Quick Insights")
-        try:
-            # Generate a quick narrative summary
-            if 'results' in locals() and results:
-                summary = generate_narrative_summary(
-                    results['reduced'], 
-                    results['session_ids'], 
-                    results['token_ids'], 
-                    st.session_state.meta
-                )
-                st.info(summary)
+        with col3:
+            major_shifts = len(concept_evolution.major_shifts)
+            st.metric("🚀 Major Shifts", major_shifts)
+        
+        with col4:
+            if concept_evolution.drift_patterns:
+                avg_drift = np.mean([p.drift_magnitude for p in concept_evolution.drift_patterns])
+                st.metric("📈 Avg Drift", f"{avg_drift:.3f}")
             else:
-                st.info("💡 Your dataset is ready for analysis. Use the tabs above to explore semantic patterns, evolution, and get AI-powered insights.")
-        except:
-            st.info("💡 Your dataset is ready for analysis. Use the tabs above to explore semantic patterns, evolution, and get AI-powered insights.")
+                st.metric("📈 Avg Drift", "N/A")
+        
+        # Main concept insights
+        st.markdown("### 💡 Your Main Concepts")
+        
+        if concept_evolution.concept_clusters:
+            # Show top 3 concepts
+            for i, cluster in enumerate(concept_evolution.concept_clusters[:3]):
+                with st.expander(f"🎯 Concept {i+1}: {', '.join(cluster.theme_keywords[:3])}", expanded=i==0):
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.write(f"**Sessions:** {len(cluster.session_indices)}")
+                        st.write(f"**Main themes:** {', '.join(cluster.theme_keywords[:5])}")
+                        st.write(f"**Representative text:** _{cluster.representative_text[:200]}..._")
+                    with col2:
+                        st.metric("Coherence", f"{cluster.coherence_score:.3f}")
+                        if concept_evolution.concept_persistence:
+                            main_theme = cluster.theme_keywords[0] if cluster.theme_keywords else f"cluster_{cluster.cluster_id}"
+                            persistence = concept_evolution.concept_persistence.get(main_theme, 0)
+                            st.metric("Persistence", f"{persistence:.1%}")
+        
+        # Quick visualization
+        st.markdown("### 📊 Concept Evolution Timeline")
+        try:
+            from visualization.concept_visualizer import visualize_concept_evolution
+            fig = visualize_concept_evolution(concept_evolution, "timeline")
+            st.plotly_chart(fig, use_container_width=True, key="overview_concept_timeline")
+        except Exception as e:
+            st.error(f"Could not generate timeline: {str(e)}")
+        
+        # Actionable next steps
+        st.markdown("### 🎯 Recommended Next Steps")
+        
+        insights = []
+        if major_shifts > 2:
+            insights.append("🚀 **High conceptual evolution** - Explore the 'Concepts' tab to understand major shifts")
+        if concept_evolution.concept_clusters and len(concept_evolution.concept_clusters[0].session_indices) > len(concept_evolution.concept_clusters) * 0.6:
+            insights.append("🎯 **Dominant theme detected** - Check 'Patterns' tab for deeper thematic analysis")
+        if concept_evolution.drift_patterns and any(p.drift_magnitude > 0.5 for p in concept_evolution.drift_patterns):
+            insights.append("🌊 **Strong semantic shifts** - Use 'Evolution' tab to track temporal changes")
+        
+        if insights:
+            for insight in insights:
+                st.markdown(f"- {insight}")
+        else:
+            st.markdown("- 📈 **Stable semantic patterns** - Your content shows consistent themes over time")
+            st.markdown("- 🔍 **Explore deeper** - Use the 'Concepts' tab for detailed cluster analysis")
+        
+        # Call to action
+        st.markdown("---")
+        st.markdown("### 🧭 Explore Your Data")
+        
+        exploration_col1, exploration_col2, exploration_col3 = st.columns(3)
+        
+        with exploration_col1:
+            if st.button("🧠 Deep Concept Analysis", key="goto_concepts"):
+                st.info("👉 Navigate to the **'🧠 Concepts'** tab for comprehensive concept analysis!")
+        
+        with exploration_col2:
+            if st.button("🌊 Evolution Patterns", key="goto_evolution"):
+                st.info("👉 Check the **'🌊 Evolution'** tab to track semantic changes over time!")
+        
+        with exploration_col3:
+            if st.button("🔍 Pattern Discovery", key="goto_patterns"):
+                st.info("👉 Visit the **'🔍 Patterns'** tab for advanced pattern analysis!")
     
     else:
-        st.info("📊 Upload more sessions to see semantic evolution analysis.")
+        # No analysis yet - show what's available
+        st.markdown("""
+        ### 🎯 What You Can Discover
+        
+        **Click 'Generate Quick Analysis' above to get:**
+        - 🧠 **Main concepts** in your data
+        - 📈 **Semantic evolution** patterns  
+        - 🚀 **Major conceptual shifts**
+        - 💡 **Personalized insights** and recommendations
+        
+        ### 📊 Your Dataset
+        """)
+        
+        # Basic dataset info
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("📊 Sessions", session_count)
+        
+        with col2:
+            total_tokens = dataset_info.get('total_tokens', 0)
+            st.metric("🔤 Total Tokens", f"{total_tokens:,}")
+        
+        with col3:
+            avg_tokens = total_tokens / max(session_count, 1)
+            st.metric("📏 Avg Length", f"{avg_tokens:.0f} tokens")
+        
+        st.markdown("""
+        ### 🚀 Ready to Analyze?
+        
+        Your semantic tensor memory system is loaded and ready! Here's what each tab offers:
+        
+        - **🧠 Concepts**: Advanced concept clustering and evolution analysis
+        - **🌊 Evolution**: Track semantic changes over time  
+        - **🔍 Patterns**: Discover hidden patterns and relationships
+        - **📐 Dimensionality**: Compare different analysis methods
+        - **🤖 AI Insights**: Get AI-powered analysis and interpretations
+        
+        **Start with the quick analysis above, then dive deeper into any tab!**
+        """)
 
 
 def render_semantic_evolution_tab():
@@ -944,6 +1561,509 @@ def render_dimensionality_tab():
             st.warning("Need ≥2 sessions for dimensionality analysis.")
 
 
+def render_enhanced_concept_analysis_tab():
+    """Render enhanced concept analysis using existing S-BERT embeddings."""
+    st.header("🧠 Enhanced Concept Analysis")
+    st.markdown("**Leveraging existing S-BERT sequence embeddings for concept-level analysis**")
+    
+    if not st.session_state.get('memory') or len(st.session_state.memory) < 2:
+        st.info("📁 Need at least 2 sessions for concept analysis")
+        st.markdown("""
+        **What you'll get with Enhanced Concept Analysis:**
+        - **🎯 Concept Clustering**: Group sessions by semantic similarity using S-BERT embeddings
+        - **📈 Drift Timeline**: Track how concepts evolve over time  
+        - **⚡ Velocity Analysis**: Measure rate of concept change
+        - **🌐 Network Visualization**: See relationships between concept clusters
+        - **🥧 Persistence Analysis**: Identify long-lasting vs transient concepts
+        - **📊 Comprehensive Dashboard**: All analyses in one view
+        
+        Upload your data to begin concept-level analysis!
+        """)
+        return
+    
+    # Analysis controls
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        n_clusters = st.slider("Number of concept clusters", 2, min(8, len(st.session_state.memory)), 5)
+        
+    with col2:
+        analysis_scope = st.selectbox(
+            "Analysis Scope",
+            ["All Sessions", "Recent 50", "Recent 100", "First 50"]
+        )
+    
+    with col3:
+        st.write("")  # Spacing
+        if st.button("🔍 Analyze Concepts", type="primary", key="concept_analyze_btn"):
+            st.session_state.run_concept_analysis = True
+    
+    # Run analysis if requested
+    if st.session_state.get('run_concept_analysis', False):
+        with st.spinner("🧠 Analyzing concept evolution using S-BERT embeddings..."):
+            try:
+                # Import enhanced concept analysis
+                from analysis.concept_analysis import ConceptAnalyzer
+                from visualization.concept_visualizer import visualize_concept_evolution
+                
+                # Create Universal STM store from existing memory
+                from memory.universal_core import UniversalMemoryStore
+                from memory.text_embedder import TextEmbedder
+                
+                # Convert existing memory to Universal STM format
+                universal_store = UniversalMemoryStore()
+                text_embedder = TextEmbedder()
+                
+                # Filter sessions based on scope
+                memory_data = st.session_state.memory
+                if analysis_scope == "Recent 50":
+                    memory_data = memory_data[-50:] if len(memory_data) > 50 else memory_data
+                elif analysis_scope == "Recent 100":
+                    memory_data = memory_data[-100:] if len(memory_data) > 100 else memory_data
+                elif analysis_scope == "First 50":
+                    memory_data = memory_data[:50]
+                
+                # Process existing sessions
+                progress_bar = st.progress(0)
+                for i, session_text in enumerate(memory_data):
+                    embedding = text_embedder.process_raw_data(
+                        session_text, 
+                        session_id=f"session_{i}"
+                    )
+                    universal_store.add_session(embedding)
+                    progress_bar.progress((i + 1) / len(memory_data))
+                
+                progress_bar.empty()
+                
+                # Run concept analysis
+                analyzer = ConceptAnalyzer(universal_store)
+                concept_evolution = analyzer.analyze_complete_concept_evolution(n_clusters)
+                
+                # Store results
+                st.session_state.concept_evolution = concept_evolution
+                st.session_state.concept_store = universal_store
+                st.session_state.run_concept_analysis = False
+                
+                st.success(f"✅ Analyzed {concept_evolution.total_sessions} sessions with {len(concept_evolution.concept_clusters)} concept clusters")
+                
+            except Exception as e:
+                st.error(f"Error in concept analysis: {str(e)}")
+                st.exception(e)
+                st.session_state.run_concept_analysis = False
+                return
+    
+    # Display results if available
+    if hasattr(st.session_state, 'concept_evolution'):
+        concept_evolution = st.session_state.concept_evolution
+        
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("📊 Sessions", concept_evolution.total_sessions)
+        with col2:
+            st.metric("🎯 Clusters", len(concept_evolution.concept_clusters))
+        with col3:
+            major_shifts = len(concept_evolution.major_shifts)
+            st.metric("🚀 Major Shifts", major_shifts)
+        with col4:
+            if concept_evolution.drift_patterns:
+                avg_drift = np.mean([p.drift_magnitude for p in concept_evolution.drift_patterns])
+                st.metric("📈 Avg Drift", f"{avg_drift:.3f}")
+            else:
+                st.metric("📈 Avg Drift", "N/A")
+        
+        # Visualization controls
+        st.subheader("📊 Concept Evolution Visualizations")
+        
+        viz_choice = st.selectbox(
+            "Choose Visualization",
+            ["📈 Dashboard", "🔥 Cluster Heatmap", "📊 Drift Timeline", "⚡ Velocity Chart", "🌐 Network Graph", "🥧 Persistence"],
+            key="concept_viz_choice"
+        )
+        
+        # Generate visualization
+        try:
+            from visualization.concept_visualizer import visualize_concept_evolution
+            
+            chart_type_map = {
+                "📈 Dashboard": "dashboard",
+                "🔥 Cluster Heatmap": "heatmap", 
+                "📊 Drift Timeline": "timeline",
+                "⚡ Velocity Chart": "velocity",
+                "🌐 Network Graph": "network",
+                "🥧 Persistence": "persistence"
+            }
+            
+            chart_type = chart_type_map[viz_choice]
+            fig = visualize_concept_evolution(concept_evolution, chart_type)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Additional context based on visualization type
+            if viz_choice == "🔥 Cluster Heatmap":
+                st.subheader("🎯 Cluster Details")
+                for cluster in concept_evolution.concept_clusters[:5]:  # Show top 5
+                    with st.expander(f"Cluster {cluster.cluster_id}: {', '.join(cluster.theme_keywords[:3])}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**Sessions:** {len(cluster.session_indices)}")
+                            st.write(f"**Coherence:** {cluster.coherence_score:.3f}")
+                        with col2:
+                            st.write(f"**Keywords:** {', '.join(cluster.theme_keywords)}")
+                            st.write(f"**Sample:** {cluster.representative_text[:150]}...")
+            
+            elif viz_choice == "📊 Drift Timeline":
+                if concept_evolution.drift_patterns:
+                    st.subheader("📋 Drift Pattern Summary")
+                    drift_df = pd.DataFrame([
+                        {
+                            "From": p.session_from + 1,
+                            "To": p.session_to + 1,
+                            "Drift": f"{p.drift_magnitude:.3f}",
+                            "Direction": p.drift_direction,
+                            "New Concepts": ", ".join(p.concept_shift_keywords[:2])
+                        }
+                        for p in concept_evolution.drift_patterns[:10]
+                    ])
+                    st.dataframe(drift_df, use_container_width=True)
+            
+            elif viz_choice == "⚡ Velocity Chart":
+                if concept_evolution.concept_velocity:
+                    max_velocity_idx = np.argmax(concept_evolution.concept_velocity)
+                    st.info(f"🚀 **Peak velocity** at transition {max_velocity_idx + 1}: {concept_evolution.concept_velocity[max_velocity_idx]:.3f}")
+            
+            elif viz_choice == "🥧 Persistence":
+                if concept_evolution.concept_persistence:
+                    st.subheader("🏆 Top Persistent Concepts")
+                    persistence_df = pd.DataFrame([
+                        {"Concept": concept, "Persistence": f"{persistence:.1%}"}
+                        for concept, persistence in sorted(
+                            concept_evolution.concept_persistence.items(),
+                            key=lambda x: x[1], reverse=True
+                        )[:5]
+                    ])
+                    st.dataframe(persistence_df, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"Visualization error: {str(e)}")
+    
+    else:
+        # Show informational content when no analysis is run yet
+        st.subheader("💡 About Enhanced Concept Analysis")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            **🎯 Concept Clustering**
+            - Groups sessions by semantic similarity
+            - Uses existing S-BERT sequence embeddings  
+            - Identifies coherent themes and topics
+            - Shows which sessions belong together
+            
+            **📈 Temporal Drift Analysis**
+            - Tracks concept evolution over time
+            - Measures drift magnitude and direction
+            - Identifies major conceptual shifts
+            - Shows stability vs. change patterns
+            """)
+        
+        with col2:
+            st.markdown("""
+            **⚡ Velocity & Network Analysis**
+            - Measures rate of concept change
+            - Maps relationships between clusters
+            - Shows concept persistence over time
+            - Provides comprehensive dashboards
+            
+            **🌟 Key Advantages**
+            - Leverages existing S-BERT embeddings
+            - No misleading PCA projections
+            - Interpretable concept-focused views
+            - Real semantic understanding
+            """)
+        
+        st.info("🚀 **Ready to analyze?** Choose your settings above and click **'Analyze Concepts'** to begin!")
+
+
+def render_explainability_dashboard():
+    """Render the explainability dashboard with clear guidance and analysis explanations."""
+    st.header("💡 Understanding Your Analysis Results")
+    
+    # Check if we have analysis results to explain
+    dataset_info = st.session_state.get('dataset_info', {})
+    has_performance_data = 'performance_metrics' in dataset_info
+    has_concept_analysis = hasattr(st.session_state, 'concept_evolution')
+    has_memory_data = len(st.session_state.get('memory', [])) > 0
+    
+    if not has_memory_data:
+        st.info("📊 Upload data to see explanations and quality assessments.")
+        return
+    
+    # Initialize explainability engine
+    try:
+        explainability_engine = ExplainabilityEngine()
+        
+        # Performance Quality Assessment
+        st.subheader("🎯 Processing Quality Assessment")
+        
+        if has_performance_data:
+            performance = dataset_info['performance_metrics']
+            
+            # Create quality explanation
+            quality_explanation = explainability_engine.explain_processing_quality(
+                success_rate=performance['success_rate'],
+                memory_efficiency=performance['memory_efficiency'],
+                processing_speed=performance['sessions_per_second'],
+                estimated_quality=performance['estimated_quality']
+            )
+            
+            # Display quality assessment
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("### 📊 What These Numbers Mean")
+                st.markdown(f"**Quality Score: {performance['estimated_quality']:.1%}**")
+                st.markdown(quality_explanation.interpretation)
+                
+                st.markdown("### 🔍 Why These Results?")
+                st.markdown(quality_explanation.reasoning)
+                
+                if quality_explanation.recommendations:
+                    st.markdown("### 💡 What You Can Do")
+                    for rec in quality_explanation.recommendations:
+                        st.markdown(f"- {rec}")
+            
+            with col2:
+                # Visual quality indicator
+                quality_score = performance['estimated_quality']
+                if quality_score > 0.8:
+                    st.success("🟢 **Excellent Quality**")
+                    st.markdown("Your data processed beautifully!")
+                elif quality_score > 0.6:
+                    st.warning("🟡 **Good Quality**")
+                    st.markdown("Solid results with room for improvement.")
+                else:
+                    st.error("🔴 **Needs Attention**")
+                    st.markdown("Several issues detected.")
+                
+                # Quick metrics
+                st.metric("Success Rate", f"{performance['success_rate']:.1%}")
+                st.metric("Memory Efficiency", f"{performance['memory_efficiency']:.1f}")
+                st.metric("Processing Speed", f"{performance['sessions_per_second']:.1f}/s")
+        
+        else:
+            st.info("🔄 Process data to see quality assessment")
+        
+        st.markdown("---")
+        
+        # Data Complexity Analysis
+        st.subheader("📊 Dataset Complexity Analysis")
+        
+        if has_performance_data:
+            complexity_score = dataset_info.get('complexity_score', 0)
+            processing_strategy = dataset_info.get('processing_strategy', 'full_processing')
+            
+            complexity_explanation = explainability_engine.explain_complexity_score(
+                complexity_score, processing_strategy
+            )
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Complexity Score", f"{complexity_score:.2f}/1.0")
+                if complexity_score > 0.7:
+                    st.markdown("🔴 **High Complexity**")
+                    st.markdown("Large, diverse dataset")
+                elif complexity_score > 0.4:
+                    st.markdown("🟡 **Medium Complexity**") 
+                    st.markdown("Moderate size and diversity")
+                else:
+                    st.markdown("🟢 **Low Complexity**")
+                    st.markdown("Small, focused dataset")
+            
+            with col2:
+                st.markdown("**Processing Strategy**")
+                strategy_display = processing_strategy.replace('_', ' ').title()
+                st.markdown(f"🎯 {strategy_display}")
+                
+                if processing_strategy == "progressive_sampling":
+                    st.markdown("Applied intelligent sampling")
+                elif processing_strategy == "smart_batching":
+                    st.markdown("Used optimized batching")
+                else:
+                    st.markdown("Full processing applied")
+            
+            with col3:
+                st.markdown("**Recommendation**")
+                st.markdown(complexity_explanation.what_it_means)
+        
+        st.markdown("---")
+        
+        # Analysis Results Explanation
+        st.subheader("🧠 Analysis Results Explainer")
+        
+        # Concept Analysis Explanation
+        if has_concept_analysis:
+            concept_evolution = st.session_state.concept_evolution
+            
+            st.markdown("### 🎯 Concept Analysis Results")
+            
+            # Explain cluster quality
+            n_clusters = len(concept_evolution.concept_clusters)
+            n_sessions = concept_evolution.total_sessions
+            
+            cluster_explanation = explainability_engine.explain_clustering_results(
+                n_clusters=n_clusters,
+                n_sessions=n_sessions,
+                cluster_quality_score=0.7  # You could calculate this from silhouette scores
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### 📊 Clustering Quality")
+                st.markdown(cluster_explanation.what_it_means)
+                st.markdown(cluster_explanation.why_these_results)
+            
+            with col2:
+                st.markdown("#### 💡 What This Means")
+                for rec in cluster_explanation.what_to_do_next[:3]:
+                    st.markdown(f"• {rec}")
+            
+            # Explain drift patterns
+            if concept_evolution.drift_patterns:
+                major_drifts = len([d for d in concept_evolution.drift_patterns if d.drift_magnitude > 0.5])
+                
+                st.markdown("### 📈 Concept Drift Analysis")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.metric("Major Concept Shifts", major_drifts)
+                    if major_drifts > 5:
+                        st.markdown("🔄 **High Dynamism** - Your concepts evolve rapidly")
+                    elif major_drifts > 2:
+                        st.markdown("📊 **Moderate Evolution** - Steady concept development")
+                    else:
+                        st.markdown("📍 **Stable Concepts** - Consistent themes")
+                
+                with col2:
+                    avg_drift = np.mean([p.drift_magnitude for p in concept_evolution.drift_patterns])
+                    st.metric("Average Drift", f"{avg_drift:.3f}")
+                    
+                    if avg_drift > 0.5:
+                        st.markdown("🌊 High conceptual fluidity")
+                    elif avg_drift > 0.3:
+                        st.markdown("🏃 Moderate concept evolution")
+                    else:
+                        st.markdown("🏠 Stable conceptual foundation")
+        
+        else:
+            st.info("🧠 Run **Concept Analysis** to see detailed explanations of your semantic patterns")
+        
+        st.markdown("---")
+        
+        # Interactive Help Section
+        st.subheader("❓ Frequently Asked Questions")
+        
+        with st.expander("🤔 **Why is my success rate low?**"):
+            st.markdown("""
+            **Common Reasons:**
+            - **Noisy Data**: Text contains many non-readable characters or formatting
+            - **Empty Sessions**: Some rows have no meaningful text content
+            - **Encoding Issues**: File encoding problems (try UTF-8)
+            - **Large File Size**: Memory constraints causing processing failures
+            
+            **Solutions:**
+            - Clean your data before upload
+            - Use intelligent sampling for large datasets
+            - Check file encoding and format
+            """)
+        
+        with st.expander("📊 **How do I improve clustering quality?**"):
+            st.markdown("""
+            **For Better Clusters:**
+            - **More Data**: At least 20-50 sessions for meaningful clusters
+            - **Consistent Topics**: Data should have some thematic coherence
+            - **Sufficient Text**: Each session should have meaningful content
+            - **Optimal Cluster Number**: Try different cluster numbers (3-15 typically work well)
+            
+            **Red Flags:**
+            - Too many tiny clusters → Reduce cluster count
+            - One giant cluster → Increase cluster count or check data diversity
+            """)
+        
+        with st.expander("🧠 **What does high concept drift mean?**"):
+            st.markdown("""
+            **High Drift Indicates:**
+            - **Learning Journey**: You're exploring new topics over time
+            - **Project Evolution**: Your focus is shifting as you progress
+            - **Conversation Dynamics**: AI conversations evolving in complexity
+            
+            **This is Often GOOD:**
+            - Shows intellectual growth
+            - Indicates active exploration
+            - Demonstrates learning progression
+            
+            **Only Concerning If:**
+            - You expected consistency but see chaos
+            - The drift doesn't match your memory of the conversations
+            """)
+        
+        with st.expander("⚡ **My processing is slow - what can I do?**"):
+            st.markdown("""
+            **Speed Optimization:**
+            - **Use Sampling**: For datasets >1000 sessions, try intelligent sampling
+            - **Smaller Batches**: Process in smaller chunks
+            - **Close Other Apps**: Free up system memory
+            - **Check File Size**: Very large files may need preprocessing
+            
+            **Memory Optimization:**
+            - **Progressive Analysis**: Build complexity gradually
+            - **Quality Over Quantity**: Sometimes less data gives better insights
+            - **System Resources**: 16GB+ RAM recommended for large datasets
+            """)
+        
+        # Performance Recommendations
+        st.subheader("🚀 Performance Recommendations")
+        
+        if has_performance_data:
+            performance = dataset_info['performance_metrics']
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 🎯 For Your Next Upload")
+                
+                if performance['success_rate'] < 0.9:
+                    st.markdown("- 🧹 **Clean your data** - Remove empty rows and formatting issues")
+                
+                if performance['memory_efficiency'] < 2.0:
+                    st.markdown("- 📊 **Use sampling** - Try intelligent sampling for large datasets")
+                
+                if performance['sessions_per_second'] < 1.0:
+                    st.markdown("- ⚡ **Optimize processing** - Close other applications to free memory")
+                
+                st.markdown("- 📈 **Gradual complexity** - Start with small datasets, build up")
+            
+            with col2:
+                st.markdown("### 💡 Analysis Strategy")
+                
+                dataset_size = dataset_info.get('session_count', 0)
+                
+                if dataset_size > 500:
+                    st.markdown("- 🎯 **Use progressive sampling** for initial exploration")
+                    st.markdown("- 🔄 **Smart batching** for full analysis")
+                elif dataset_size > 100:
+                    st.markdown("- 📊 **Full processing** with quality monitoring")
+                    st.markdown("- 🧠 **Focus on concept evolution** analysis")
+                else:
+                    st.markdown("- ✅ **Perfect size** for comprehensive analysis")
+                    st.markdown("- 🌟 **Try all analysis methods** to compare")
+    
+    except Exception as e:
+        st.error(f"Error initializing explainability engine: {str(e)}")
+        st.info("💡 The explainability features require the analysis modules to be properly loaded.")
+
+
 def main():
     """Main application with clean, intuitive interface."""
     # Clean up any rerun flags
@@ -960,12 +2080,14 @@ def main():
         # Show main app interface
         render_simple_sidebar()
         
-        # Main tabs (simplified to 4 focused areas)
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        # Main tabs (now with Enhanced Concept Analysis and Explainability)
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "🏠 Overview", 
             "🌊 Evolution", 
             "🔍 Patterns", 
             "📐 Dimensionality",
+            "🧠 Concepts",
+            "💡 Explain",
             "🤖 AI Insights"
         ])
         
@@ -982,6 +2104,12 @@ def main():
             render_dimensionality_tab()
         
         with tab5:
+            render_enhanced_concept_analysis_tab()
+        
+        with tab6:
+            render_explainability_dashboard()
+        
+        with tab7:
             st.header("🤖 AI-Powered Analysis")
             render_comprehensive_chat_analysis()
 
