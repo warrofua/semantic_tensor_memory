@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import List
 from rich import print
+from memory.sequence_drift import sequence_drift
+import itertools
 
 def heatmap(tensors: List[torch.Tensor]):
     """Create session-to-session similarity heatmap from ragged tensors.
@@ -86,3 +88,35 @@ def token_heatmap(tensors: List[torch.Tensor], window: int = 3):
         plt.ylabel("Token")
     plt.tight_layout()
     plt.show() 
+
+
+def token_alignment_heatmap(tensors: List[torch.Tensor], i: int, j: int):
+    """Create a matplotlib figure of token-aligned distance heatmap between two sessions.
+
+    Returns a matplotlib Figure for embedding in Streamlit (use st.pyplot(fig)).
+    """
+    if i < 0 or j < 0 or i >= len(tensors) or j >= len(tensors) or i == j:
+        print("[red]Invalid indices for token alignment heatmap[/red]")
+        return None
+
+    A = tensors[i]
+    B = tensors[j]
+    if A.numel() == 0 or B.numel() == 0:
+        print("[yellow]One of the sessions is empty[/yellow]")
+        return None
+
+    # Normalize
+    A_norm = torch.nn.functional.normalize(A, p=2, dim=1)
+    B_norm = torch.nn.functional.normalize(B, p=2, dim=1)
+    # Pairwise distances
+    dist = 1 - torch.mm(A_norm, B_norm.t()).numpy()  # [Na, Nb]
+
+    # Build figure
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(dist, cmap="magma")
+    fig.colorbar(im, ax=ax, label="Distance")
+    ax.set_title(f"Token Alignment Distance\nSession {i+1} vs Session {j+1}")
+    ax.set_xlabel(f"Session {j+1} Tokens")
+    ax.set_ylabel(f"Session {i+1} Tokens")
+    fig.tight_layout()
+    return fig

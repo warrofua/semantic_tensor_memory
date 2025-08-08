@@ -162,11 +162,21 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
     Returns:
         dict containing analysis results or None if processing failed
     """
-    from viz.pca_plot import prepare_for_pca
+    from tensor_batching import pad_and_stack, flatten_with_mask
     
     try:
-        # Step 1: Prepare data with robust preprocessing
-        flat, session_ids, token_ids = prepare_for_pca(memory_slice)
+        # Step 1: Prepare data with pad + mask and flatten
+        batch_tensor, mask_tensor = pad_and_stack(memory_slice)
+        flat_t, session_ids_t, token_ids_t = flatten_with_mask(batch_tensor, mask_tensor)
+        flat = flat_t.numpy()
+        session_ids = session_ids_t
+        token_ids = token_ids_t
+
+        # Mask diagnostics
+        total_slots = int(mask_tensor.numel())
+        valid_slots = int(mask_tensor.sum().item())
+        masked_slots = total_slots - valid_slots
+        mask_ratio = masked_slots / max(1, total_slots)
         
         # Step 2: Enhanced data validation
         if flat.shape[0] < n_components:
@@ -303,7 +313,7 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
         if return_scaler:
             results['scaler'] = scaler
         
-        # Step 16: Display improvement suggestions
+        # Step 16: Display improvement suggestions and mask diagnostics
         with st.expander("🔧 Analysis Improvements Applied", expanded=False):
             st.markdown(f"""
             **Preprocessing Enhancements:**
@@ -318,6 +328,13 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
             - **Quality score**: {quality_score:.2f}/1.0 ({quality})
             - **Features processed**: {results['original_features']} → {results['n_features']}
             """)
+            st.markdown(f"""
+            **Masking Diagnostics:**
+            - **Total slots**: {total_slots}
+            - **Valid (unmasked)**: {valid_slots}
+            - **Masked**: {masked_slots} ({mask_ratio:.1%})
+            - **Samples used**: {flat_scaled.shape[0]}
+            """)
             
             if condition_number > 1e10:
                 st.warning("⚠️ High condition number detected. Consider using more aggressive feature selection or regularization.")
@@ -325,6 +342,15 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
             if cumulative_var[-1] < 0.3:
                 st.info("💡 Low explained variance is common with high-dimensional semantic embeddings. Consider using UMAP or autoencoders for better dimensionality reduction.")
         
+        # Attach mask stats
+        results['mask_stats'] = {
+            'total_slots': total_slots,
+            'valid_slots': valid_slots,
+            'masked_slots': masked_slots,
+            'mask_ratio': mask_ratio,
+            'samples_used': int(flat_scaled.shape[0])
+        }
+
         return results
         
     except Exception as e:
@@ -437,7 +463,8 @@ def collect_comprehensive_analysis_data():
         'heatmap_analysis': {},
         'semantic_trajectory': {},
         'ridgeline_analysis': {},
-        'session_texts': []
+        'session_texts': [],
+        'dates': []
     }
     
     if len(st.session_state.memory) == 0:
@@ -446,6 +473,11 @@ def collect_comprehensive_analysis_data():
     # Collect session texts for context
     if 'meta' in st.session_state:
         analysis_data['session_texts'] = [meta.get('text', '') for meta in st.session_state.meta]
+        # Attempt to collect dates if present
+        try:
+            analysis_data['dates'] = [meta.get('date') for meta in st.session_state.meta if 'date' in meta]
+        except Exception:
+            analysis_data['dates'] = []
     
     # Drift Analysis Data
     if len(st.session_state.memory) > 1:
@@ -467,7 +499,7 @@ def collect_comprehensive_analysis_data():
         memory_slice = st.session_state.memory
         meta_slice = st.session_state.meta
         
-        # 2D PCA with enhanced pipeline
+        # 2D PCA with enhanced pipeline (ragged -> flat handled in viz.pca_plot)
         results_2d = robust_pca_pipeline(memory_slice, meta_slice, n_components=2, method='auto')
         if results_2d:
             analysis_data['pca_2d_analysis'] = {

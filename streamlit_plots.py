@@ -64,36 +64,37 @@ def plot_drift_plotly(drifts, token_counts):
 
 
 def plot_heatmap_plotly(tensors):
-    """Create interactive heatmap using Plotly with a cool-to-warm color scale."""
-    # Compute session means
-    means = torch.stack([t.mean(0) for t in tensors])
-    
+    """Create interactive heatmap using Plotly with padding/mask-aware session vectors."""
+    from tensor_batching import pad_and_stack, masked_session_means
+    # Pad and compute masked means for stability
+    batch, mask = pad_and_stack(tensors)
+    means = masked_session_means(batch, mask)  # [B, D]
+
     # Compute cosine similarity matrix
-    means_norm = torch.nn.functional.normalize(means, p=2, dim=1)
-    sims = torch.mm(means_norm, means_norm.t())
-    dist = 1 - sims.numpy()
-    
+    means_norm = torch.nn.functional.normalize(means, p=2, dim=1) if means.numel() else means
+    sims = torch.mm(means_norm, means_norm.t()) if means.numel() else torch.zeros(0, 0)
+    dist = (1 - sims).numpy() if sims.numel() else np.zeros((0, 0))
+
     # Get token counts for annotation
     token_counts = [t.shape[0] for t in tensors]
-    
+
     # Create heatmap with a cool-to-warm color scale
     fig = go.Figure(data=go.Heatmap(
         z=dist,
-        colorscale='RdYlBu',  # Cool-to-warm color scale
-        reversescale=True,    # So low values are blue, high values are red
-        text=[[f"{count}" for count in token_counts] for _ in range(len(token_counts))],
-        texttemplate="%{text}",
+        colorscale='RdYlBu',
+        reversescale=True,
+        text=[[f"{count}" for count in token_counts] for _ in range(len(token_counts))] if len(token_counts) > 0 else None,
+        texttemplate="%{text}" if len(token_counts) > 0 else None,
         textfont={"size": 10},
         colorbar=dict(title="Cosine distance")
     ))
-    
-    # Update layout
+
     fig.update_layout(
         title="Session-to-Session Semantic Drift",
         xaxis_title="Session",
         yaxis_title="Session"
     )
-    
+
     return fig
 
 

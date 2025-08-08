@@ -12,16 +12,18 @@ from streamlit_utils import add_chat_message, is_ollama_model_available, collect
 
 
 def create_semantic_insights_prompt(analysis_data):
-    """Create a content-focused prompt for semantic analysis."""
-    
+    """Create a content-focused, domain-adaptive prompt for semantic analysis."""
+
     # Extract key content insights
     session_texts = analysis_data.get('session_texts', [])
     drift_analysis = analysis_data.get('drift_analysis', {})
     trajectory = analysis_data.get('semantic_trajectory', {})
     
     prompt_parts = [
-        "You are an expert in analyzing personal and professional development patterns through text analysis.",
-        "Focus on the semantic meaning, life journey, and personal growth insights rather than technical metrics.",
+        "You are an expert analyst who adapts to the dataset domain.",
+        "First infer the domain from the session texts and metadata (e.g., ABA therapy/clinical notes, learning journals, software/project logs, research notes, general conversations).",
+        "Then adopt the most suitable perspective (e.g., ABA clinician, therapist, learning coach, project analyst, research mentor) and use domain-appropriate language.",
+        "Focus on meaning and actionable insights rather than technical model metrics.",
         "",
         "SEMANTIC JOURNEY ANALYSIS:",
         f"- Total sessions: {analysis_data.get('total_sessions', 0)}",
@@ -63,7 +65,7 @@ def create_semantic_insights_prompt(analysis_data):
             "",
             "SEMANTIC EVOLUTION PATTERNS:",
             f"- Change pattern: {trend} (avg rate: {avg_drift:.3f})",
-            f"- This suggests: {'semantic stabilization and focus development' if trend == 'decreasing' else 'increasing exploration and change'}",
+            f"- Interpretation (domain-aware): if decreasing → consolidation/stability; if increasing → exploration/change",
         ])
     
     # Add trajectory insights
@@ -74,89 +76,81 @@ def create_semantic_insights_prompt(analysis_data):
             f"- Interpretation: {'settling into expertise/mastery phase' if velocity_trend == 'decreasing' else 'accelerating learning and exploration'}",
         ])
     
+    # Adaptive time-scale guidance
+    # Infer time granularity from metadata if available
+    time_hint = ""
+    try:
+        dates = analysis_data.get('dates', []) or []
+        if dates and len(dates) >= 2:
+            # assume ISO or YYYY-MM-DD; basic spread heuristic
+            import datetime as _dt
+            def _parse(d):
+                try:
+                    return _dt.datetime.fromisoformat(d)
+                except Exception:
+                    return None
+            parsed = [p for p in (_parse(d) for d in dates) if p]
+            if len(parsed) >= 2:
+                span_days = (max(parsed) - min(parsed)).days
+                if span_days >= 365 * 2:
+                    time_hint = "Use quarters as the primary time scale; consider years for summaries."
+                elif span_days >= 365:
+                    time_hint = "Use months as the primary time scale; summarize by quarters where helpful."
+                elif span_days >= 120:
+                    time_hint = "Use weeks as the primary time scale; summarize by months."
+                elif span_days >= 30:
+                    time_hint = "Use weeks as the primary time scale."
+                else:
+                    time_hint = "Use days as the primary time scale."
+    except Exception:
+        time_hint = ""
+
     prompt_parts.extend([
         "",
-        "ANALYSIS FOCUS:",
+        "ANALYSIS FOCUS (adapt to inferred domain):",
         "Please provide insights on:",
-        "1. PERSONAL/PROFESSIONAL DEVELOPMENT JOURNEY: What story do these sessions tell about growth, learning, and change?",
-        "2. KEY BREAKTHROUGH MOMENTS: What do the significant shifts reveal about important life/career transitions?",
-        "3. CURRENT PHASE: Based on recent patterns, what phase of development is this person in?",
-        "4. ACTIONABLE INSIGHTS: What specific next steps would support continued growth based on the semantic patterns?",
-        "5. PATTERN INTERPRETATION: What do the evolution trends suggest about learning style, career progression, or personal development?",
+        "1. OVERALL NARRATIVE: What story do these sessions tell about goals, themes, and change?",
+        "2. KEY SHIFTS: What major transition points occurred and what likely drove them?",
+        "3. CURRENT STATE: Based on recent patterns, what is the present phase/status?",
+        "4. TIME-SCALE: Infer an appropriate time-scale for summarizing patterns based on the date span (e.g., if months of data, use weeks; if years, use months or quarters). " + (f"Hint: {time_hint}" if time_hint else ""),
+        "5. ACTIONABLE NEXT STEPS: Domain-appropriate recommendations (e.g., ABA interventions, study plan tweaks, project milestones, reflective practices).",
+        "5. RISKS & WATCHPOINTS: Any emerging issues or regressions to monitor.",
+        "6. DATA CAVEATS: Any limitations in the dataset that affect confidence.",
         "",
-        "Focus on human insights, growth patterns, and meaningful recommendations rather than technical analysis.",
-        "Be specific about what the content reveals about this person's journey and potential next steps."
+        "Ground every point in the session content. Keep language suitable for the inferred domain."
     ])
     
     return "\n".join(prompt_parts)
 
 
 def create_targeted_insights_prompt(analysis_data):
-    """Create focused prompts based on the specific patterns detected."""
-    
+    """Create adaptive, domain-agnostic deep-dive prompts, relying on the LLM to infer domain."""
+
     session_texts = analysis_data.get('session_texts', [])
-    trajectory = analysis_data.get('semantic_trajectory', {})
     drift_analysis = analysis_data.get('drift_analysis', {})
-    
-    # Detect the type of journey based on content patterns
+    trajectory = analysis_data.get('semantic_trajectory', {})
+
+    base = [
+        "DEEP-DIVE ANGLES (choose those most appropriate for the inferred domain):",
+        "- Thematic structure: dominant themes and how they evolve.",
+        "- Phase mapping: identify distinct phases/stages and transition drivers.",
+        "- Intervention/strategy review (if applicable): what worked, what didn’t, and why.",
+        "- Risks/regressions: early warning signs and mitigation ideas.",
+        "- Next experiments/milestones: concrete, domain-appropriate steps.",
+        "- Outcome metrics/KPIs: propose realistic indicators to track, tailored to the domain.",
+    ]
+
+    # Add a concise context anchor to aid domain inference without forcing it
     if session_texts:
-        combined_text = " ".join(session_texts).lower()
-        
-        # Career transition detection
-        career_keywords = ['job', 'career', 'work', 'manager', 'team', 'company', 'interview', 'promotion', 'skills']
-        learning_keywords = ['learn', 'study', 'course', 'bootcamp', 'python', 'programming', 'data', 'algorithm']
-        research_keywords = ['research', 'paper', 'study', 'analysis', 'experiment', 'hypothesis', 'publication']
-        personal_keywords = ['feel', 'think', 'believe', 'growth', 'change', 'journey', 'reflection']
-        
-        career_score = sum(1 for keyword in career_keywords if keyword in combined_text)
-        learning_score = sum(1 for keyword in learning_keywords if keyword in combined_text)
-        research_score = sum(1 for keyword in research_keywords if keyword in combined_text)
-        personal_score = sum(1 for keyword in personal_keywords if keyword in combined_text)
-        
-        # Determine primary journey type
-        scores = {
-            'career_transition': career_score,
-            'learning_journey': learning_score,
-            'research_development': research_score,
-            'personal_growth': personal_score
-        }
-        
-        primary_journey = max(scores, key=scores.get)
-        
-        journey_prompts = {
-            'career_transition': [
-                "This appears to be a CAREER TRANSITION journey. Analyze:",
-                "- What career shift is happening and what's driving it?",
-                "- What skills and competencies are being developed?",
-                "- What challenges and breakthroughs are evident?",
-                "- What's the next logical step in this career progression?"
-            ],
-            'learning_journey': [
-                "This appears to be a LEARNING AND SKILL DEVELOPMENT journey. Analyze:",
-                "- What subjects/skills are being mastered and in what sequence?",
-                "- What learning patterns and preferences are evident?",
-                "- Where are the knowledge gaps or struggle points?",
-                "- What advanced topics should be tackled next?"
-            ],
-            'research_development': [
-                "This appears to be a RESEARCH AND ACADEMIC journey. Analyze:",
-                "- What research interests and methodologies are developing?",
-                "- How is academic thinking and expertise evolving?",
-                "- What collaboration and publication patterns emerge?",
-                "- What research directions show the most promise?"
-            ],
-            'personal_growth': [
-                "This appears to be a PERSONAL DEVELOPMENT journey. Analyze:",
-                "- What personal insights and self-awareness patterns emerge?",
-                "- How are values, beliefs, and perspectives evolving?",
-                "- What life challenges and growth opportunities are present?",
-                "- What personal development focus would be most beneficial?"
-            ]
-        }
-        
-        return journey_prompts.get(primary_journey, journey_prompts['personal_growth'])
-    
-    return ["Analyze this semantic journey focusing on personal and professional development patterns."]
+        base.append("")
+        base.append("Context anchor excerpts (for domain inference):")
+        base.append(f"- Start: {session_texts[0][:140]}...")
+        if len(session_texts) > 2:
+            mid_point = len(session_texts) // 2
+            base.append(f"- Mid: {session_texts[mid_point][:140]}...")
+        base.append(f"- Recent: {session_texts[-1][:140]}...")
+
+    return base
 
 
 def stream_ollama_response(prompt_text, model_name):

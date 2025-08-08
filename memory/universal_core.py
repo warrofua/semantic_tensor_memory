@@ -197,11 +197,26 @@ class UniversalMemoryStore:
                         if emb.modality == modality]
         else:
             sequences = [emb.sequence_embedding for emb in self.embeddings]
-        
+
         if not sequences:
-            return torch.empty(0, 768)  # Return empty tensor with appropriate shape
-        
-        return torch.stack(sequences)
+            # Return an empty tensor with dynamic embedding dimension if known, else 0
+            default_dim = 0
+            for emb in self.embeddings:
+                if emb.sequence_embedding is not None:
+                    default_dim = emb.sequence_embedding.shape[-1]
+                    break
+            return torch.empty(0, default_dim)
+
+        # Ensure all tensors have the same dimension
+        dim = sequences[0].shape[-1]
+        sequences = [s.view(-1) if s.ndim == 1 else s.squeeze(0) for s in sequences]
+        stacked = torch.stack(sequences)
+        if stacked.shape[-1] != dim:
+            # As a safeguard, coerce to min common dim
+            min_dim = min(s.shape[-1] for s in sequences)
+            trimmed = [s[..., :min_dim] for s in sequences]
+            return torch.stack(trimmed)
+        return stacked
     
     def analyze_cross_modal_drift(self, session_a: int, session_b: int) -> Dict[str, Any]:
         """

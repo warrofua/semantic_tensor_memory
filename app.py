@@ -6,6 +6,7 @@ Now powered by Universal Multimodal STM architecture.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import time
 import pandas as pd
 import csv
@@ -71,6 +72,7 @@ from streamlit_plots import (
 )
 from viz.semantic_drift_river import render_semantic_drift_river_analysis
 from viz.holistic_semantic_analysis import render_holistic_semantic_analysis
+from viz.heatmap import token_alignment_heatmap
 from chat_analysis import render_comprehensive_chat_analysis
 # Chat history analysis (unified with main processing)
 from chat_history_analyzer import ChatHistoryParser
@@ -98,7 +100,7 @@ st.set_page_config(
     page_title="Universal Multimodal STM",
     page_icon="🌐",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Memory management utilities
@@ -115,6 +117,32 @@ def cleanup_memory():
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
+# Sidebar control utilities
+def _collapse_sidebar_via_js():
+    """Attempt to collapse the Streamlit sidebar using a tiny JS hack."""
+    components.html(
+        """
+        <script>
+        (function() {
+          const doc = window.parent.document;
+          const btn = doc.querySelector('[data-testid="stSidebarCollapseButton"]');
+          const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+          if (btn && sidebar && sidebar.offsetWidth > 0) {
+            btn.click();
+          }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+def collapse_sidebar_once_after_load():
+    """Collapse the sidebar exactly once after data has been loaded."""
+    if not st.session_state.get('sidebar_minimized_after_load', False):
+        _collapse_sidebar_via_js()
+        st.session_state['sidebar_minimized_after_load'] = True
 
 # CRITICAL PERFORMANCE FIX: Model caching
 @st.cache_resource
@@ -973,6 +1001,18 @@ def render_overview_dashboard():
         **Start with the quick analysis above, then dive deeper into any tab!**
         """)
 
+    # Mini similarity heatmap (sampled)
+    if session_count >= 2 and 'memory' in st.session_state and st.session_state.memory:
+        with st.expander("🔥 Mini Similarity Heatmap (sampled)", expanded=False):
+            max_n = min(30, session_count)
+            n = st.slider("Sessions (first N)", 2, max_n, min(10, max_n))
+            try:
+                fig = plot_heatmap_plotly(st.session_state.memory[:n])
+                st.plotly_chart(fig, use_container_width=True, key="overview_mini_heatmap")
+                st.caption("Go to 🔍 Patterns → Similarity Heatmap for full view and token alignment.")
+            except Exception as e:
+                st.error(f"Mini heatmap failed: {e}")
+
 
 def render_semantic_evolution_tab():
     """Combined semantic evolution analysis (drift + trajectory)."""
@@ -1003,6 +1043,34 @@ def render_semantic_evolution_tab():
         if trajectory_data:
             table_data = display_trajectory_analysis_table(trajectory_data)
             st.dataframe(table_data, use_container_width=True)
+
+        # Token alignment for consecutive sessions
+        with st.expander("🔎 Token Drift Alignment (consecutive sessions)"):
+            if len(st.session_state.memory) >= 2:
+                max_pair = len(st.session_state.memory) - 1
+                pair_idx = st.slider("Step (i → i+1)", 1, max_pair, 1)
+                if st.button("Show alignment", key="evolution_token_alignment"):
+                    try:
+                        fig_align = token_alignment_heatmap(st.session_state.memory, pair_idx-1, pair_idx)
+                        if fig_align is not None:
+                            st.pyplot(fig_align, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Token alignment failed: {e}")
+
+        # Token importance drift and coherence trends
+        from memory.sequence_drift import token_importance_drift, semantic_coherence_score
+        with st.expander("📌 Token Importance Drift & Coherence"):
+            try:
+                top_k = st.slider("Top drifting tokens (K)", 5, 20, 10)
+                top = token_importance_drift(st.session_state.memory, top_k=top_k)
+                if top:
+                    df_top = pd.DataFrame(top, columns=["SessionIndex", "DriftScore"]) 
+                    df_top["SessionIndex"] = df_top["SessionIndex"].astype(int) + 1
+                    st.dataframe(df_top, use_container_width=True)
+                coherences = [semantic_coherence_score(t) for t in st.session_state.memory]
+                st.line_chart(pd.DataFrame({"Coherence": coherences}))
+            except Exception as e:
+                st.caption(f"Drift/coherence summary unavailable: {e}")
     
     else:
         st.warning("Need ≥2 sessions for evolution analysis.")
@@ -1054,6 +1122,22 @@ def render_pattern_analysis_tab():
             # Heatmap
             fig = plot_heatmap_plotly(st.session_state.memory)
             st.plotly_chart(fig, use_container_width=True, key="pattern_heatmap")
+
+            # Optional token alignment drilldown
+            with st.expander("🔎 Token Alignment Heatmap (pairwise)"):
+                if len(st.session_state.memory) >= 2:
+                    col_i, col_j = st.columns(2)
+                    with col_i:
+                        i = st.number_input("Session i", min_value=1, max_value=len(st.session_state.memory), value=1)
+                    with col_j:
+                        j = st.number_input("Session j", min_value=1, max_value=len(st.session_state.memory), value=2)
+                    if st.button("Show token alignment", key="show_token_alignment"):
+                        try:
+                            fig_align = token_alignment_heatmap(st.session_state.memory, int(i)-1, int(j)-1)
+                            if fig_align is not None:
+                                st.pyplot(fig_align, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Token alignment heatmap failed: {e}")
         
         elif analysis_type.startswith("🎬"):
             # Animated analysis
@@ -1062,7 +1146,7 @@ def render_pattern_analysis_tab():
             # Animation type selector
             animation_type = st.radio(
                 "Choose animation type:",
-                ["🎯 Trajectory Evolution", "📈 PCA Over Time", "📊 Variance Build-up", "🌊 Liminal Tunnel", "🌌 4D Semantic Space"],
+                ["🎯 Trajectory Evolution", "📈 PCA Over Time", "📊 Variance Build-up", "🌊 Liminal Tunnel", "🌌 4D Semantic Space", "🔥 Temporal Similarity (sliding window)"],
                 horizontal=True
             )
             
@@ -1092,6 +1176,23 @@ def render_pattern_analysis_tab():
                     trajectory_fig = create_animated_pca_trajectory(results, st.session_state.meta, speed)
                     if trajectory_fig:
                         st.plotly_chart(trajectory_fig, use_container_width=True, key="pattern_animated_trajectory")
+                        # Axis explainer (LLM)
+                        with st.expander("🧠 Axis Explainer (LLM)"):
+                            try:
+                                from viz.semantic_analysis import analyze_pca_patterns
+                                # Build texts/scores for PC1 extremes
+                                reduced = results['reduced']
+                                session_ids = np.array(results['session_ids'])
+                                pca1 = reduced[:,0]
+                                idxs = np.argsort(pca1)
+                                sample_idxs = np.concatenate([idxs[:3], idxs[-3:]]) if len(idxs) >= 6 else idxs
+                                texts = [st.session_state.meta[session_ids[i]].get('text','') for i in sample_idxs]
+                                scores = [float(pca1[i]) for i in sample_idxs]
+                                if st.button("Explain axes", key="explain_axes_traj"):
+                                    summary = analyze_pca_patterns(texts, scores)
+                                    st.write(summary)
+                            except Exception as e:
+                                st.caption(f"Axis explainer unavailable: {e}")
                 
                 elif animation_type.startswith("📈"):
                     # PCA over time animation
@@ -1163,6 +1264,13 @@ def render_pattern_analysis_tab():
                         """)
                     else:
                         st.error("Could not generate 4D semantic space visualization")
+
+                elif animation_type.startswith("🔥"):
+                    # Temporal similarity heatmap
+                    window = st.slider("Window size", min_value=3, max_value=min(12, len(st.session_state.memory)), value=5)
+                    temp_fig = create_temporal_heatmap(results, st.session_state.meta, window_size=window)
+                    if temp_fig:
+                        st.plotly_chart(temp_fig, use_container_width=True, key="pattern_temporal_similarity")
     
     else:
         st.warning("Need ≥2 sessions for pattern analysis.")
@@ -1231,6 +1339,12 @@ def render_dimensionality_tab():
                 else:
                     use_3d_animation = is_3d
             
+            # Point granularity toggle
+            st.markdown("### 🔬 Point Granularity")
+            granularity = st.radio(
+                "Show points as:", ["Session means", "Tokens (sampled)"] , index=0, horizontal=True
+            )
+
             # Run analysis with preferred method if available and selected
             if use_preferred and 'method_results' in st.session_state:
                 # Use cached UMAP results
@@ -1305,7 +1419,31 @@ def render_dimensionality_tab():
                     
                     if results:
                         # Visualization
-                        fig = create_pca_visualization(results, meta_slice, is_3d=is_3d)
+                        if granularity.startswith("Tokens"):
+                            # Rebuild a token-level scatter directly from results (sampled)
+                            try:
+                                reduced = results['reduced']
+                                session_ids = np.array(results['session_ids'])
+                                max_points = 2000
+                                if reduced.shape[0] > max_points:
+                                    idx = np.linspace(0, reduced.shape[0]-1, max_points, dtype=int)
+                                    reduced = reduced[idx]
+                                    session_ids = session_ids[idx]
+                                df = pd.DataFrame({
+                                    'PC1': reduced[:,0],
+                                    'PC2': reduced[:,1],
+                                    'SessionIdx': session_ids
+                                })
+                                if is_3d and reduced.shape[1] > 2:
+                                    df['PC3'] = reduced[:,2]
+                                    fig = px.scatter_3d(df, x='PC1', y='PC2', z='PC3', color='SessionIdx', color_continuous_scale='RdYlBu')
+                                else:
+                                    fig = px.scatter(df, x='PC1', y='PC2', color='SessionIdx', color_continuous_scale='RdYlBu')
+                            except Exception as e:
+                                st.error(f"Token-level view failed, falling back to session means: {e}")
+                                fig = create_pca_visualization(results, meta_slice, is_3d=is_3d)
+                        else:
+                            fig = create_pca_visualization(results, meta_slice, is_3d=is_3d)
                         st.plotly_chart(fig, use_container_width=True, key="dimensionality_enhanced_pca")
                         
                         # Quality metrics
@@ -1710,6 +1848,19 @@ def render_enhanced_concept_analysis_tab():
                         with col2:
                             st.write(f"**Keywords:** {', '.join(cluster.theme_keywords)}")
                             st.write(f"**Sample:** {cluster.representative_text[:150]}...")
+
+                        # Token alignment for two representative sessions in this cluster
+                        with st.expander("🔎 Token Alignment (top exemplars)"):
+                            if len(cluster.session_indices) >= 2:
+                                a = cluster.session_indices[0]
+                                b = cluster.session_indices[1]
+                                st.caption(f"Aligning Session {a+1} and Session {b+1}")
+                                if st.button(f"Show alignment for Cluster {cluster.cluster_id}", key=f"cluster_align_{cluster.cluster_id}"):
+                                    try:
+                                        token_alignment_heatmap(st.session_state.memory, a, b)
+                                        st.caption("Close the Matplotlib window to continue.")
+                                    except Exception as e:
+                                        st.error(f"Alignment failed: {e}")
             
             elif viz_choice == "📊 Drift Timeline":
                 if concept_evolution.drift_patterns:
@@ -1823,14 +1974,14 @@ def render_explainability_dashboard():
             with col1:
                 st.markdown("### 📊 What These Numbers Mean")
                 st.markdown(f"**Quality Score: {performance['estimated_quality']:.1%}**")
-                st.markdown(quality_explanation.interpretation)
+                st.markdown(quality_explanation.what_it_means)
                 
                 st.markdown("### 🔍 Why These Results?")
-                st.markdown(quality_explanation.reasoning)
+                st.markdown(quality_explanation.why_these_results)
                 
-                if quality_explanation.recommendations:
+                if quality_explanation.what_to_do_next:
                     st.markdown("### 💡 What You Can Do")
-                    for rec in quality_explanation.recommendations:
+                    for rec in quality_explanation.what_to_do_next:
                         st.markdown(f"- {rec}")
             
             with col2:
@@ -1960,6 +2111,28 @@ def render_explainability_dashboard():
             st.info("🧠 Run **Concept Analysis** to see detailed explanations of your semantic patterns")
         
         st.markdown("---")
+
+        # Ragged tensors & masking explainer
+        st.subheader("🧵 Ragged Tensors, Padding, and Masking")
+        try:
+            tokens_per_session = [t.shape[0] for t in st.session_state.memory]
+            avg_tokens = np.mean(tokens_per_session) if tokens_per_session else 0
+            max_tokens = np.max(tokens_per_session) if tokens_per_session else 0
+            padded_ratio = 0.0
+            if len(tokens_per_session) > 0 and max_tokens > 0:
+                total_slots = len(tokens_per_session) * max_tokens
+                total_real = sum(tokens_per_session)
+                padded_ratio = 1 - (total_real / total_slots)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Avg tokens/session", f"{avg_tokens:.0f}")
+            with col2:
+                st.metric("Max tokens", f"{max_tokens}")
+            with col3:
+                st.metric("Padding ratio", f"{padded_ratio:.1%}")
+            st.caption("We use padding + masks to compute stable session means and token-level PCA without biasing distances.")
+        except Exception:
+            pass
         
         # Interactive Help Section
         st.subheader("❓ Frequently Asked Questions")
@@ -2074,10 +2247,13 @@ def main():
     has_data = len(st.session_state.get('memory', [])) > 0
     
     if not has_data:
+        # Ensure sidebar is allowed to show expanded on fresh/no-data state
+        st.session_state['sidebar_minimized_after_load'] = False
         # Show upload screen for new users
         render_upload_screen()
     else:
         # Show main app interface
+        collapse_sidebar_once_after_load()
         render_simple_sidebar()
         
         # Main tabs (now with Enhanced Concept Analysis and Explainability)
