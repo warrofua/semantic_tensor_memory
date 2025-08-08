@@ -1,64 +1,84 @@
 # Semantic Tensor Memory
 
-A structured, interpretable memory system for tracking meaning across time, tokens, and context. This implementation provides a working prototype of the Semantic Tensor Memory (STM) system described in the accompanying paper.
+A structured, interpretable memory system for tracking meaning across time, tokens, and context. This implementation provides a working prototype of the Semantic Tensor Memory (STM) system described in the accompanying paper/TeX write-up.
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Install dependencies:**
+1. **(Optional) Create and activate a venv:**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate
+    ```
+
+2. **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
     - Additional system requirement: For the CLI CSV import feature, ensure your Python installation includes `tkinter` (standard on most desktop Python distributions).
 
-2. **Run the interactive demo:**
-    ```bash
-    python demo.py
-    ```
-
-3. **Run the Streamlit app:**
+3. **Start the Streamlit app:**
     ```bash
     streamlit run app.py
     ```
+    - On first load, the sidebar opens to let you upload a CSV. After upload, the sidebar stays minimized for more canvas space.
+    - Try with `ultimate_demo_dataset.csv` or `aba_therapy_dataset.csv` in the repo root.
 
-4. **Try these CLI commands:**
-    - Type sentences to build semantic memory interactively.
-    - Type `import` to import session notes from a CSV file (popup file picker, requires tkinter).
-    - Type `plot` to visualize semantic drift (PCA, heatmap, and LLM clinical summary).
-    - Type `drift` to see drift metrics between sessions.
-    - Type `tokens` to see token-level drift.
-    - Type `exit` to quit.
+4. **Interactive CLI demo (optional):**
+    ```bash
+    python demo.py
+    ```
+    - Type sentences to build memory, `import` to load a CSV (requires `tkinter`), `plot` for PCA/heatmap, `drift` for metrics, `tokens` for token-level drift, `exit` to quit.
 
 ---
 
 ## 🗂️ Project Structure
 
+- `app.py`: Streamlit web application (tabs: Overview, Evolution, Patterns, Dimensionality, Concepts, Explain, AI Insights)
+- `streamlit_utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
+- `streamlit_plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
+- `chat_analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
 - `memory/`: Core memory implementation
-  - `embedder.py`: Token embedding using BERT
-  - `store.py`: Tensor storage, management, and save/load utilities
-  - `drift.py`: Semantic drift analysis utilities
-- `viz/`: Visualization and analysis tools
-  - `pca_plot.py`: 2D drift visualization, PCA, and LLM clinical summary
-  - `heatmap.py`: Session similarity heatmaps
-  - `pca_summary.py`: Narrative and keyword PCA axis summaries
-  - `semantic_analysis.py`: LLM-powered clinical/narrative analysis (Ollama integration)
-- `demo.py`: Interactive CLI demo (with CSV import and file picker)
-- `app.py`: Streamlit web application for interactive analysis and visualization
+  - `universal_core.py`: Universal STM types and `UniversalMemoryStore` (dynamic dims, ragged sequences)
+  - `text_embedder.py`: Dual-resolution text embeddings (token-level BERT + sentence-level S-BERT)
+  - `embedder.py` / `embedder_sbert.py` / `embedder_hybrid.py`: Embedding backends
+  - `drift.py` / `sequence_drift.py`: Drift metrics, token alignment (Hungarian), token-importance drift
+  - `store.py`: Storage utilities
+- `tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
+- `viz/`: Visualization tools
+  - `heatmap.py`: Similarity heatmaps, token alignment heatmap (returns Matplotlib Figure)
+  - `pca_plot.py`, `pca_summary.py`, `semantic_analysis.py`, `holistic_semantic_analysis.py`
+- `visualization/`: Additional concept visualizers
+- `demo.py`, `demo_universal_stm.py`: CLI demos
+- `ultimate_demo_dataset.csv`: Rich demo dataset
+- `aba_therapy_dataset.csv`: ABA therapy dataset (and extended version for same client)
+- `archive/`: Historical docs (safe to remove if not needed)
 - `requirements.txt`: Python dependencies
 
 ---
 
 ## ✨ Features
 
-- Token-level semantic tracking
-- Temporal drift visualization (PCA, heatmap)
-- Session similarity and drift metrics
-- Persistent memory storage
-- CSV import with file picker (requires tkinter)
-- LLM-powered clinical and narrative summaries (Ollama integration)
-- Rich CLI for interactive exploration
-- Streamlit web app for interactive analysis and visualization
+- Dual-resolution embeddings (token-level BERT + sentence-level S-BERT)
+- Ragged tensors with padding and masks for batch ops (`tensor_batching.py`)
+- Mask-aware PCA pipeline with diagnostics; token or session-mean granularity
+- Token alignment heatmaps (Hungarian alignment) and token-importance drift
+- Temporal drift visuals: PCA trajectories, similarity heatmaps, temporal heatmaps
+- Concept analysis: clustering, evolution, exemplar alignment in clusters
+- Dimensionality tab with LLM Axis Explainer
+- Explain tab with AI explanations (`what_it_means`, `why_these_results`, `what_to_do_next`)
+- AI Insights: domain-aware prompt that infers appropriate time scale (days/weeks/months/quarters) from dataset span
+- Streamlit UX: first-load expanded sidebar, minimized after upload; inline Matplotlib (no blocking windows)
+- Datasets: `ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`
+## 📦 Datasets
+
+- `ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
+- `aba_therapy_dataset.csv`: ABA-specific schema/content; extended to a larger set for the same client.
+
+Upload either via the Streamlit sidebar to explore the full suite of analyses.
+
+Expected columns (typical): `session_id`, `date`, `title` (optional), `text`.
 
 ---
 
@@ -74,44 +94,79 @@ A structured, interpretable memory system for tracking meaning across time, toke
 
 ## ⚠️ Notes
 
-- The `venv/` directory is excluded from git and should **not** be committed.
-- For LLM-powered summaries, ensure [Ollama](https://ollama.com/) is installed and running with a supported model (e.g., `qwen3:latest`).
-- For best results, run the demo from a standard terminal (not inside VS Code or over SSH) to enable the file picker popup.
-- **Dependencies:** This project requires `torch`, `transformers`, `scikit-learn`, `plotly`, `streamlit`, `rich`, `requests`, `pandas`, and `numpy`. The CLI CSV import feature requires `tkinter` (standard on most desktop Python installations).
+- The `venv/` directory is excluded from git and should not be committed.
+- For LLM-powered summaries, ensure Ollama is installed and running with a supported model (e.g., `qwen3:latest`).
+- The Streamlit app renders Matplotlib figures inline; no external windows will block interaction.
+- Key dependencies: `torch`, `transformers`, `scikit-learn`, `plotly`, `streamlit`, `pandas`, `numpy`, `rich`, `requests`. The CLI CSV import feature requires `tkinter`.
 
 ---
 
 ## 📄 Citation
-If you use this codebase or ideas in your research, please cite the accompanying paper or link to this repository. 
+If you use this codebase or ideas in your research, please cite the accompanying paper or link to this repository.
 
 ---
 
-## 📄 Documentation Alignment: PDF vs. Codebase
+## 📄 Documentation Alignment: Paper/TeX vs. Codebase
 
-This section provides an objective mapping between the accompanying PDF (semantic-tensor-memory.pdf) and the codebase. It documents the completeness and correspondence of features, implementation, and documentation.
+This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF) to the codebase. It documents feature completeness and correspondence.
 
 ### Overview
 
-- The PDF describes the motivation, architecture, algorithms, applications, and limitations of the Semantic Tensor Memory (STM) system.
-- The codebase implements the STM system as described, including all major features, visualizations, and example analyses.
+- The paper/TeX describes the motivation, architecture, algorithms, applications, and limitations of STM.
+- The codebase implements STM with ragged tensor handling, dual-resolution embeddings, token alignment, and domain-aware LLM interpretation.
 
 ### Feature Correspondence Table
 
-| Area                | PDF Coverage | Codebase Coverage | Notes                                                      |
-|---------------------|--------------|-------------------|------------------------------------------------------------|
-| STM Architecture    | Yes          | Yes               | Mathematical formalism and implementation are aligned.      |
-| Data Import         | Yes          | Yes               | Interactive and CSV import, with metadata preservation.     |
-| Visualization       | Yes          | Yes               | PCA, heatmaps, token trajectories, and session drift.       |
-| LLM Integration     | Yes          | Yes               | Local LLM (Ollama) summaries and axis interpretation.       |
-| Applications        | Yes          | Yes               | Use cases described; codebase provides tools for analysis.  |
-| Example Analysis    | Yes          | Yes               | ABA session notes example and data included.                |
-| Limitations/Future  | Yes          | Partial           | Tests/containerization mentioned as future work in PDF.     |
-| UI/CLI Details      | Brief        | Yes               | More detail in codebase/README than in PDF.                 |
-| Figures             | Yes          | Yes               | All referenced figures are generated by the codebase.       |
+| Area                | Paper Coverage | Codebase Coverage | Notes                                                      |
+|---------------------|----------------|-------------------|------------------------------------------------------------|
+| STM Architecture    | Yes            | Yes               | Aligned; dynamic dims and ragged sequences implemented.    |
+| Data Import         | Yes            | Yes               | CSV upload in Streamlit; CLI import with tkinter.          |
+| Visualization       | Yes            | Yes               | PCA, heatmaps, token alignment, token trajectories.        |
+| LLM Integration     | Yes            | Yes               | Axis Explainer; domain-aware insights with time scale.     |
+| Applications        | Yes            | Yes               | ABA and general datasets provided.                         |
+| Example Analysis    | Yes            | Yes               | Demo datasets included.                                    |
+| Limitations/Future  | Yes            | Partial           | Multimodal audio, alerts, streaming, storage optimizations.|
+| UI/CLI Details      | Brief          | Yes               | More detail in codebase/README than in paper.              |
+| Figures             | Yes            | Yes               | All figures rendered inline in app; assets can be saved.   |
 
 ### Summary
 
-- All major features and analyses described in the PDF are implemented in the codebase.
-- The codebase provides additional practical details (CLI commands, Streamlit UI) not fully detailed in the PDF.
-- The PDF is a conceptual and technical description; the codebase is a working implementation.
-- The only notable gap is the lack of automated tests and containerization in the codebase, which are mentioned as future work in the PDF. 
+- All major features and analyses described in the paper are implemented.
+- The code includes practical details (CLI commands, Streamlit UI) beyond the paper.
+- Remaining roadmap items: audio modality, drift alerts/governance, streaming ingestion, storage efficiency, and expanded tests/CI.
+
+---
+
+## 🧩 How tensors flow (ragged → padded + mask)
+
+- Token embeddings are variable-length per session (ragged).
+- `tensor_batching.pad_and_stack` pads to `max_tokens` and returns `(batch, mask)`.
+- Downstream ops (PCA, heatmaps) use masks to ignore padding:
+  - `masked_session_means(batch, mask)` for session granularity
+  - `flatten_with_mask(batch, mask)` for token granularity with `(session_ids, token_ids)`
+
+## 🔗 Token alignment & drift
+
+- Consecutive/session-pair alignment via Hungarian algorithm (in `sequence_drift.py`).
+- Visualize with `viz.heatmap.token_alignment_heatmap` (returns a Matplotlib Figure; rendered inline in Streamlit).
+
+## 🧠 AI prompts
+
+- Prompts in `chat_analysis.py` infer domain and an appropriate time scale (days/weeks/months/quarters) from the dataset date span.
+- Explain tab uses `AnalysisExplanation` fields: `what_it_means`, `why_these_results`, `what_to_do_next`.
+
+---
+
+## 🛠️ Troubleshooting
+
+- Port 8501 in use: `lsof -ti:8501 | xargs -r kill -9`
+- Ollama not running: install/start Ollama and pull a model (e.g., `qwen3:latest`).
+- Matplotlib blocking window: fixed — figures are returned and rendered inline in Streamlit.
+- PyTorch view/reshape error: the PCA pipeline uses `.reshape(...)` and contiguous tensors in `tensor_batching.py`.
+- `pytest` not found: install via `pip install pytest` or use the app directly.
+
+---
+
+## 🗃️ Archive folder
+
+The `archive/` directory contains historical documents and is not required at runtime. You can remove it if you prefer a lean repo.
