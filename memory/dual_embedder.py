@@ -1,9 +1,14 @@
-from transformers import AutoTokenizer, AutoModel
-from sentence_transformers import SentenceTransformer
-import torch
 import os
-from typing import Dict, List, Tuple, Optional
+import sys
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+
+import torch
+from sentence_transformers import SentenceTransformer
+from transformers import AutoModel, AutoTokenizer
 
 # Initialize models
 BERT_MODEL = "bert-base-uncased"
@@ -176,7 +181,7 @@ def create_enhanced_categories(memory_store: DualMemoryStore) -> Dict:
     - Token-level concept extraction (granular)
     - Sentence-level semantic clustering (high quality)
     """
-    from viz.holistic_semantic_analysis import extract_all_concepts_globally
+    from semantic_tensor_memory.visualization.holistic import extract_all_concepts_globally
     
     # Extract concepts from token-level analysis (STM approach)
     token_tensors = memory_store.get_token_tensors()

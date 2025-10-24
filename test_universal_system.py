@@ -7,7 +7,10 @@ while preserving STM's core concepts and enabling cross-modal analysis.
 """
 
 import sys
+from pathlib import Path
+
 sys.path.append('.')
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
 
 import torch
 import time

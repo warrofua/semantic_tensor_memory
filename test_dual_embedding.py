@@ -5,7 +5,10 @@ BERT (token-level) + S-BERT (sentence-level) = Best of both worlds
 """
 
 import sys
+from pathlib import Path
+
 sys.path.append('.')
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
 
 from memory.dual_embedder import DualMemoryStore, create_dual_embedding
 import torch

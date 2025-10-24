@@ -5,12 +5,20 @@ Test script for Enhanced Concept Analysis
 Tests the new concept analysis features to ensure they work with existing S-BERT embeddings.
 """
 
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
+
 import torch
 import numpy as np
 from memory.universal_core import UniversalMemoryStore
 from memory.text_embedder import TextEmbedder
-from analysis.concept_analysis import ConceptAnalyzer, analyze_existing_store_concepts
-from visualization.concept_visualizer import visualize_concept_evolution
+from semantic_tensor_memory.visualization import (
+    ConceptAnalyzer,
+    analyze_existing_store_concepts,
+    visualize_concept_evolution,
+)
 
 def test_concept_analysis():
     """Test the enhanced concept analysis pipeline."""
@@ -109,7 +117,7 @@ def test_similarity_matrix():
     """Test the concept similarity matrix functionality."""
     print("\n🔗 Testing concept similarity matrix...")
     
-    from analysis.concept_analysis import get_concept_similarity_matrix
+    from semantic_tensor_memory.visualization import get_concept_similarity_matrix
     
     # Simple test with a few sessions
     store = UniversalMemoryStore()
