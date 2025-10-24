@@ -20,6 +20,7 @@ import torch
 import gc
 import psutil
 from pathlib import Path
+from importlib import resources
 import plotly.graph_objects as go
 import plotly.express as px
 from sklearn.manifold import TSNE
@@ -676,18 +677,16 @@ def render_upload_screen():
         st.markdown("### 🎯 Try Example Datasets")
         
         if st.button("📚 Load Demo Dataset", type="primary"):
-            # Check if demo dataset exists
-            if os.path.exists("demo_dataset.csv"):
-                with open("demo_dataset.csv", "rb") as f:
-                    mock_file = type('MockFile', (), {
-                        'name': 'demo_dataset.csv',
-                        'read': lambda: f.read(),
-                        'seek': lambda x: None
-                    })()
-                    if handle_unified_upload(mock_file):
-                        st.rerun()
-            else:
+            try:
+                dataset_bytes = resources.files("data").joinpath("demo_dataset.csv").read_bytes()
+            except (FileNotFoundError, ModuleNotFoundError):
                 st.error("Demo dataset not found. Please upload your own file.")
+            else:
+                mock_file = io.BytesIO(dataset_bytes)
+                mock_file.name = "demo_dataset.csv"
+                mock_file.seek(0)
+                if handle_unified_upload(mock_file):
+                    st.rerun()
         
         st.markdown("""
         <div style="background: #f0f2f6; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">

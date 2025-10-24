@@ -188,7 +188,7 @@ We've successfully implemented **live streaming animations** and **dramatically 
 
 ## 🎭 Demo Dataset Optimized
 
-The `demo_dataset.csv` is **perfectly optimized** for showcasing animations:
+The `data/demo_dataset.csv` file is **perfectly optimized** for showcasing animations:
 - **Clear semantic evolution** from accounting → AI research
 - **Major phase transitions** ideal for animation
 - **Vocabulary progression** shows dramatic trajectory
@@ -207,7 +207,7 @@ streamlit run app.py --server.port 8501
 ### 2. Load Demo Data
 - Navigate to http://localhost:8501
 - Use "Import sessions from CSV" in sidebar
-- Upload `demo_dataset.csv`
+- Upload `data/demo_dataset.csv`
 
 ### 3. Explore New Features
 - **🎬 Animated Evolution** tab - All animations
