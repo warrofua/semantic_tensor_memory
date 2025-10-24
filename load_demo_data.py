@@ -14,15 +14,18 @@ The dataset showcases:
 - Natural phase transitions with semantic shifts
 """
 
+from datetime import datetime
+from importlib import resources
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
 
 def load_demo_dataset():
     """Load the demonstration dataset and return analysis insights."""
     
     # Load the dataset
-    df = pd.read_csv('demo_dataset.csv')
+    with resources.as_file(resources.files("data").joinpath("demo_dataset.csv")) as dataset_path:
+        df = pd.read_csv(dataset_path)
     
     # Convert timestamps to readable dates
     df['date'] = pd.to_datetime(df['timestamp'], unit='s')
@@ -104,7 +107,7 @@ def get_streamlit_import_instructions():
     
     1. Open your Semantic Tensor Memory app at http://localhost:8501
     2. In the sidebar, use "Import sessions from CSV"
-    3. Upload the file: demo_dataset.csv
+    3. Upload the file: data/demo_dataset.csv
     4. The app will load 30 sessions showing a complete learning journey
     
     🔬 RECOMMENDED ANALYSIS WORKFLOW:
@@ -127,4 +130,4 @@ def get_streamlit_import_instructions():
 
 if __name__ == "__main__":
     print_dataset_overview()
-    print(get_streamlit_import_instructions()) 
+    print(get_streamlit_import_instructions())
