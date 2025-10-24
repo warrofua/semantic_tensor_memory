@@ -5,7 +5,10 @@ Demonstrates why the dual BERT+S-BERT system is superior to token averaging.
 """
 
 import sys
+from pathlib import Path
+
 sys.path.append('.')
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
 
 import torch
 from memory.embedder_config import analyze_embedding_quality, print_embedding_comparison, set_embedding_mode

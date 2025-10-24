@@ -20,6 +20,7 @@ import torch
 import gc
 import psutil
 from pathlib import Path
+import sys
 from importlib import resources
 import plotly.graph_objects as go
 import plotly.express as px
@@ -27,6 +28,9 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
+
+# Ensure the consolidated visualization package is available on the path
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
 
 # Fix PyTorch/Streamlit compatibility issues
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -71,9 +75,14 @@ from streamlit_plots import (
     create_4d_semantic_space_visualization,
     create_liminal_tunnel_visualization
 )
-from viz.semantic_drift_river import render_semantic_drift_river_analysis
-from viz.holistic_semantic_analysis import render_holistic_semantic_analysis
-from viz.heatmap import token_alignment_heatmap
+# Consolidated visualization helpers
+from semantic_tensor_memory.visualization import (
+    generate_narrative_summary,
+    render_holistic_semantic_analysis,
+    render_semantic_drift_river_analysis,
+    token_alignment_heatmap,
+)
+
 from chat_analysis import render_comprehensive_chat_analysis
 # Chat history analysis (unified with main processing)
 from chat_history_analyzer import ChatHistoryParser
@@ -84,7 +93,6 @@ from semantic_trajectory import (
     display_trajectory_analysis_table
 )
 from alternative_dimensionality import compare_dimensionality_methods, create_alternative_visualization
-from viz.pca_summary import generate_narrative_summary
 
 # Add performance optimizer import at the top
 from performance_optimizer import (
@@ -827,7 +835,7 @@ def render_overview_dashboard():
         with st.spinner("🧠 Analyzing your semantic patterns..."):
             try:
                 # Quick concept analysis with fewer clusters for overview
-                from analysis.concept_analysis import ConceptAnalyzer
+                from semantic_tensor_memory.visualization import ConceptAnalyzer
                 from memory.universal_core import UniversalMemoryStore
                 from memory.text_embedder import TextEmbedder
                 
@@ -916,7 +924,7 @@ def render_overview_dashboard():
         # Quick visualization
         st.markdown("### 📊 Concept Evolution Timeline")
         try:
-            from visualization.concept_visualizer import visualize_concept_evolution
+            from semantic_tensor_memory.visualization import visualize_concept_evolution
             fig = visualize_concept_evolution(concept_evolution, "timeline")
             st.plotly_chart(fig, use_container_width=True, key="overview_concept_timeline")
         except Exception as e:
@@ -1178,7 +1186,7 @@ def render_pattern_analysis_tab():
                         # Axis explainer (LLM)
                         with st.expander("🧠 Axis Explainer (LLM)"):
                             try:
-                                from viz.semantic_analysis import analyze_pca_patterns
+                                from semantic_tensor_memory.visualization import analyze_pca_patterns
                                 # Build texts/scores for PC1 extremes
                                 reduced = results['reduced']
                                 session_ids = np.array(results['session_ids'])
@@ -1740,8 +1748,8 @@ def render_enhanced_concept_analysis_tab():
         with st.spinner("🧠 Analyzing concept evolution using S-BERT embeddings..."):
             try:
                 # Import enhanced concept analysis
-                from analysis.concept_analysis import ConceptAnalyzer
-                from visualization.concept_visualizer import visualize_concept_evolution
+                from semantic_tensor_memory.visualization import ConceptAnalyzer
+                from semantic_tensor_memory.visualization import visualize_concept_evolution
                 
                 # Create Universal STM store from existing memory
                 from memory.universal_core import UniversalMemoryStore
@@ -1820,7 +1828,7 @@ def render_enhanced_concept_analysis_tab():
         
         # Generate visualization
         try:
-            from visualization.concept_visualizer import visualize_concept_evolution
+            from semantic_tensor_memory.visualization import visualize_concept_evolution
             
             chart_type_map = {
                 "📈 Dashboard": "dashboard",

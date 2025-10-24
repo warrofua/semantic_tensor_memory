@@ -1,8 +1,13 @@
 """Streamlit-specific plotting functions for Semantic Tensor Memory.
 
-This module contains Plotly and Altair plotting functions specifically designed 
+This module contains Plotly and Altair plotting functions specifically designed
 for the Streamlit interface, including interactive plots, animations, and multi-view dashboards.
 """
+
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
 
 import streamlit as st
 import plotly.graph_objects as go
@@ -969,7 +974,7 @@ def create_liminal_tunnel_visualization(memory, meta, tunnel_segments=25, tunnel
     
     try:
         from streamlit_utils import robust_pca_pipeline
-        from viz.pca_plot import prepare_for_pca
+        from semantic_tensor_memory.visualization import prepare_for_pca
         from sklearn.manifold import TSNE
         from scipy.interpolate import interp1d
         
@@ -1216,7 +1221,7 @@ def create_optimized_tunnel_mesh(hybrid_coords, session_metadata, tunnel_segment
 
 def plot_enhanced_ridgeline_altair(memory, meta, show_trends=True, highlight_changes=True):
     """Create enhanced ridgeline plot with improved readability and interpretation aids."""
-    from viz.pca_plot import prepare_for_pca
+    from semantic_tensor_memory.visualization import prepare_for_pca
     
     try:
         # Prepare data for dimensionality reduction
@@ -1594,7 +1599,7 @@ def get_ridgeline_scaling_info(df_ridge, adaptive_height, adaptive_y_range):
 
 def plot_ridgeline_plotly(memory, meta, show_trends=True, highlight_changes=True):
     """Create ridgeline plot using Plotly for better visibility and control."""
-    from viz.pca_plot import prepare_for_pca
+    from semantic_tensor_memory.visualization import prepare_for_pca
     
     try:
         # Prepare data for dimensionality reduction

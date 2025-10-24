@@ -1,15 +1,10 @@
 """
-Holistic Semantic Analysis - Revolutionary Global Approach
+"""semantic_tensor_memory.visualization.holistic
+=================================================
 
-This module implements a comprehensive semantic analysis methodology:
-1. Global Concept Extraction: Extract ALL concepts from entire dataset
-2. Semantic Clustering: Find natural concept relationships using embeddings
-3. Category Definition: Create meaningful semantic categories
-4. Temporal Evolution: Track how categories emerge and evolve over time
-5. Advanced Visualization: Multiple views of semantic category evolution
-6. Holistic Semantic Drift River: Categories flowing as 3D rivers
-
-This approach provides much deeper insights than session-by-session analysis.
+High-level exploratory visualisations that surface global semantic trends. The
+helpers in this module consolidate the previously scattered holistic analysis
+utilities and keep their scope clear to prevent future drift.
 """
 
 import numpy as np

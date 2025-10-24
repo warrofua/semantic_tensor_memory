@@ -4,6 +4,11 @@ This module provides UMAP, t-SNE, and other advanced dimensionality reduction
 techniques as alternatives to PCA for better handling of high-dimensional semantic data.
 """
 
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
+
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -41,7 +46,7 @@ def umap_analysis(memory_slice, meta_slice, n_components=2, n_neighbors=15, min_
         return None
     
     try:
-        from viz.pca_plot import prepare_for_pca
+        from semantic_tensor_memory.visualization import prepare_for_pca
         
         # Prepare data
         flat, session_ids, token_ids = prepare_for_pca(memory_slice)
@@ -129,7 +134,7 @@ def enhanced_tsne_analysis(memory_slice, meta_slice, n_components=2, perplexity=
         dict containing t-SNE results or None if processing failed
     """
     try:
-        from viz.pca_plot import prepare_for_pca
+        from semantic_tensor_memory.visualization import prepare_for_pca
         
         # Prepare data
         flat, session_ids, token_ids = prepare_for_pca(memory_slice)
