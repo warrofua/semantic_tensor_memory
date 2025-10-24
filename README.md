@@ -36,25 +36,25 @@ A structured, interpretable memory system for tracking meaning across time, toke
 ## 🗂️ Project Structure
 
 - `app.py`: Streamlit web application (tabs: Overview, Evolution, Patterns, Dimensionality, Concepts, Explain, AI Insights)
-- `streamlit_utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
-- `streamlit_plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
-- `chat_analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
-- `memory/`: Core memory implementation
+- `src/semantic_tensor_memory/streamlit/utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
+- `src/semantic_tensor_memory/streamlit/plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
+- `src/semantic_tensor_memory/chat/analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
+- `src/semantic_tensor_memory/memory/`: Core memory implementation
   - `universal_core.py`: Universal STM types and `UniversalMemoryStore` (dynamic dims, ragged sequences)
   - `text_embedder.py`: Dual-resolution text embeddings (token-level BERT + sentence-level S-BERT)
   - `embedder.py` / `embedder_sbert.py` / `embedder_hybrid.py`: Embedding backends
   - `drift.py` / `sequence_drift.py`: Drift metrics, token alignment (Hungarian), token-importance drift
   - `store.py`: Storage utilities
-- `tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
-- `viz/`: Visualization tools
+- `src/semantic_tensor_memory/analytics/tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
+- `src/semantic_tensor_memory/visualization/viz/`: Visualization tools
   - `heatmap.py`: Similarity heatmaps, token alignment heatmap (returns Matplotlib Figure)
   - `pca_plot.py`, `pca_summary.py`, `semantic_analysis.py`, `holistic_semantic_analysis.py`
-- `visualization/`: Additional concept visualizers
-- `demo.py`, `demo_universal_stm.py`: CLI demos
+- `src/semantic_tensor_memory/visualization/tools/`: Additional concept visualizers
+- `src/semantic_tensor_memory/demos/`: CLI demos and dataset helpers
 - `ultimate_demo_dataset.csv`: Rich demo dataset
 - `aba_therapy_dataset.csv`: ABA therapy dataset (and extended version for same client)
 - `archive/`: Historical docs (safe to remove if not needed)
-- `requirements.txt`: Python dependencies
+- `pyproject.toml`: Python package metadata and dependencies
 
 ---
 

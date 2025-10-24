@@ -27,6 +27,9 @@ from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 
+BASE_DIR = Path(__file__).resolve().parent
+DEMO_DATA_PATH = BASE_DIR / "demo_dataset.csv"
+
 # Fix PyTorch/Streamlit compatibility issues
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -46,19 +49,24 @@ except Exception:
     pass
 
 # Import Universal Multimodal STM modules
-from memory.universal_core import (
-    UniversalMemoryStore, Modality, create_universal_embedder,
-    embed_text  # Backward compatibility
+from semantic_tensor_memory import (
+    UniversalMemoryStore,
+    Modality,
+    create_universal_embedder,
+    embed_text,
+    TextEmbedder,
+    create_text_embedding,
+    embed_sentence,
 )
-from memory.text_embedder import TextEmbedder, create_text_embedding, embed_sentence
-from memory.store import save, append  # Keep legacy store for compatibility
-from memory.drift import drift_series  # Keep legacy drift analysis
+from semantic_tensor_memory.memory.store import save, append  # Keep legacy store for compatibility
+from semantic_tensor_memory.memory.drift import drift_series  # Keep legacy drift analysis
 
 # Import visualization modules
-from streamlit_utils import initialize_session_state, robust_pca_pipeline
-from streamlit_plots import (
-    plot_drift_plotly, 
-    plot_heatmap_plotly, 
+from semantic_tensor_memory.streamlit import (
+    initialize_session_state,
+    robust_pca_pipeline,
+    plot_drift_plotly,
+    plot_heatmap_plotly,
     create_pca_visualization,
     create_animated_pca_trajectory,
     create_temporal_heatmap,
@@ -68,32 +76,40 @@ from streamlit_plots import (
     plot_ridgeline_altair,
     create_pca_timeline_animation,
     create_4d_semantic_space_visualization,
-    create_liminal_tunnel_visualization
+    create_liminal_tunnel_visualization,
 )
-from viz.semantic_drift_river import render_semantic_drift_river_analysis
-from viz.holistic_semantic_analysis import render_holistic_semantic_analysis
-from viz.heatmap import token_alignment_heatmap
-from chat_analysis import render_comprehensive_chat_analysis
+from semantic_tensor_memory.visualization import (
+    render_semantic_drift_river_analysis,
+    render_holistic_semantic_analysis,
+    token_alignment_heatmap,
+    generate_narrative_summary,
+)
+from semantic_tensor_memory.chat.analysis import render_comprehensive_chat_analysis
 # Chat history analysis (unified with main processing)
-from chat_history_analyzer import ChatHistoryParser
+from semantic_tensor_memory.chat.history_analyzer import ChatHistoryParser
 
-from semantic_trajectory import (
+from semantic_tensor_memory.analytics.trajectory import (
     calculate_semantic_trajectory_data,
     create_3d_trajectory_plot,
-    display_trajectory_analysis_table
+    display_trajectory_analysis_table,
 )
-from alternative_dimensionality import compare_dimensionality_methods, create_alternative_visualization
-from viz.pca_summary import generate_narrative_summary
+from semantic_tensor_memory.analytics.dimensionality import (
+    compare_dimensionality_methods,
+    create_alternative_visualization,
+)
 
 # Add performance optimizer import at the top
-from performance_optimizer import (
-    AdaptiveDataProcessor, 
-    ProgressiveAnalyzer, 
+from semantic_tensor_memory.optimization import (
+    AdaptiveDataProcessor,
+    ProgressiveAnalyzer,
     create_performance_dashboard,
     DatasetProfile,
-    PerformanceMetrics
+    PerformanceMetrics,
 )
-from explainability_engine import ExplainabilityEngine, create_explanation_dashboard
+from semantic_tensor_memory.explainability import (
+    ExplainabilityEngine,
+    create_explanation_dashboard,
+)
 
 # Set page config
 st.set_page_config(
@@ -304,7 +320,7 @@ def handle_unified_upload(uploaded_file):
                 file_content = uploaded_file.read().decode('utf-8')
                 
                 # Parse messages using existing chat parser
-                from chat_history_analyzer import ChatHistoryParser
+                from semantic_tensor_memory.chat.history_analyzer import ChatHistoryParser
                 messages = ChatHistoryParser.auto_detect_format(file_content)
                 
                 if not messages:
@@ -677,10 +693,10 @@ def render_upload_screen():
         
         if st.button("📚 Load Demo Dataset", type="primary"):
             # Check if demo dataset exists
-            if os.path.exists("demo_dataset.csv"):
-                with open("demo_dataset.csv", "rb") as f:
+            if DEMO_DATA_PATH.exists():
+                with DEMO_DATA_PATH.open("rb") as f:
                     mock_file = type('MockFile', (), {
-                        'name': 'demo_dataset.csv',
+                        'name': DEMO_DATA_PATH.name,
                         'read': lambda: f.read(),
                         'seek': lambda x: None
                     })()
@@ -828,9 +844,9 @@ def render_overview_dashboard():
         with st.spinner("🧠 Analyzing your semantic patterns..."):
             try:
                 # Quick concept analysis with fewer clusters for overview
-                from analysis.concept_analysis import ConceptAnalyzer
-                from memory.universal_core import UniversalMemoryStore
-                from memory.text_embedder import TextEmbedder
+                from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer
+                from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
+                from semantic_tensor_memory.memory.text_embedder import TextEmbedder
                 
                 # PERFORMANCE FIX: Use cached models for quick analysis
                 if 'quick_analysis_store' not in st.session_state:
@@ -1058,7 +1074,10 @@ def render_semantic_evolution_tab():
                         st.error(f"Token alignment failed: {e}")
 
         # Token importance drift and coherence trends
-        from memory.sequence_drift import token_importance_drift, semantic_coherence_score
+        from semantic_tensor_memory.memory.sequence_drift import (
+            token_importance_drift,
+            semantic_coherence_score,
+        )
         with st.expander("📌 Token Importance Drift & Coherence"):
             try:
                 top_k = st.slider("Top drifting tokens (K)", 5, 20, 10)
@@ -1179,7 +1198,9 @@ def render_pattern_analysis_tab():
                         # Axis explainer (LLM)
                         with st.expander("🧠 Axis Explainer (LLM)"):
                             try:
-                                from viz.semantic_analysis import analyze_pca_patterns
+                                from semantic_tensor_memory.visualization.viz.semantic_analysis import (
+                                    analyze_pca_patterns,
+                                )
                                 # Build texts/scores for PC1 extremes
                                 reduced = results['reduced']
                                 session_ids = np.array(results['session_ids'])
@@ -1741,12 +1762,12 @@ def render_enhanced_concept_analysis_tab():
         with st.spinner("🧠 Analyzing concept evolution using S-BERT embeddings..."):
             try:
                 # Import enhanced concept analysis
-                from analysis.concept_analysis import ConceptAnalyzer
+                from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer
                 from visualization.concept_visualizer import visualize_concept_evolution
                 
                 # Create Universal STM store from existing memory
-                from memory.universal_core import UniversalMemoryStore
-                from memory.text_embedder import TextEmbedder
+                from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
+                from semantic_tensor_memory.memory.text_embedder import TextEmbedder
                 
                 # Convert existing memory to Universal STM format
                 universal_store = UniversalMemoryStore()
