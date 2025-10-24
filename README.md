@@ -20,7 +20,7 @@ A structured, interpretable memory system for tracking meaning across time, toke
 
 3. **Start the Streamlit app:**
     ```bash
-    streamlit run app.py
+    streamlit run semantic_tensor_memory/app/main.py
     ```
     - On first load, the sidebar opens to let you upload a CSV. After upload, the sidebar stays minimized for more canvas space.
     - Try with the curated datasets in `data/` (for example, `data/ultimate_demo_dataset.csv` or `data/aba_therapy_dataset.csv`).

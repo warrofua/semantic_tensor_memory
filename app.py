@@ -1,3 +1,4 @@
+"""Streamlit entry point for the Semantic Tensor Memory app."""
 """
 Universal Multimodal Semantic Tensor Memory Analysis Application
 
@@ -2296,6 +2297,7 @@ def main():
             st.header("🤖 AI-Powered Analysis")
             render_comprehensive_chat_analysis()
 
+from semantic_tensor_memory.app import main
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -8,7 +8,34 @@ Intelligent data management and adaptive processing for large datasets.
 import streamlit as st
 import numpy as np
 import torch
-import psutil
+try:  # pragma: no cover - optional dependency
+    import psutil  # type: ignore
+except ImportError:  # pragma: no cover - fallback path
+    class _VirtualMemory:
+        total = 0
+        available = 0
+
+    class _MemoryInfo:
+        rss = 0
+
+    class _Process:
+        def memory_info(self):
+            return _MemoryInfo()
+
+    class _PsutilFallback:
+        @staticmethod
+        def virtual_memory():
+            return _VirtualMemory()
+
+        @staticmethod
+        def cpu_count():
+            return 1
+
+        @staticmethod
+        def Process():
+            return _Process()
+
+    psutil = _PsutilFallback()  # type: ignore
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
