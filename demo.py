@@ -1,10 +1,19 @@
 import time, torch
+import sys
+from pathlib import Path
+import os
+
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
+
 from memory.embedder import embed_sentence
 from memory.store import load, append
 from memory.drift import drift_series, token_drift
-from viz.pca_plot import plot, plot_drift
-from viz.heatmap import heatmap, token_heatmap
-import os
+from semantic_tensor_memory.visualization import (
+    heatmap,
+    plot,
+    plot_drift,
+    token_heatmap,
+)
 
 # For CSV import
 import csv

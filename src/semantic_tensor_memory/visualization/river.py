@@ -1,14 +1,9 @@
-"""
-Semantic Drift River (SDR) Plot - Revolutionary Visualization
+"""semantic_tensor_memory.visualization.river
+=============================================
 
-A groundbreaking visualization technique that represents semantic evolution as a flowing river system:
-- Each "tributary" represents a key concept/entity (e.g., "risk," "learning," "career")
-- Stream width = magnitude of semantic drift for that concept
-- Stream color = direction/stability (green = stabilizing, red = volatile)
-- Streams can split/merge when concepts diverge/converge
-- Interactive overlays with semantic summaries and LLM interpretations
-
-This is a novel contribution to semantic analysis visualization.
+Specialised helpers for the "semantic drift river" visualisation, kept separate
+from the broader holistic analysis module so the intent of each renderer is
+clear and discoverable.
 """
 
 import numpy as np
@@ -26,7 +21,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
 import torch
 
-from viz.pca_plot import prepare_for_pca
+from .plots import prepare_for_pca
 from memory.embedder import embed_sentence
 
 

@@ -23,7 +23,7 @@ A structured, interpretable memory system for tracking meaning across time, toke
     streamlit run semantic_tensor_memory/app/main.py
     ```
     - On first load, the sidebar opens to let you upload a CSV. After upload, the sidebar stays minimized for more canvas space.
-    - Try with `ultimate_demo_dataset.csv` or `aba_therapy_dataset.csv` in the repo root.
+    - Try with the curated datasets in `data/` (for example, `data/ultimate_demo_dataset.csv` or `data/aba_therapy_dataset.csv`).
 
 4. **Interactive CLI demo (optional):**
     ```bash
@@ -51,8 +51,8 @@ A structured, interpretable memory system for tracking meaning across time, toke
   - `pca_plot.py`, `pca_summary.py`, `semantic_analysis.py`, `holistic_semantic_analysis.py`
 - `visualization/`: Additional concept visualizers
 - `demo.py`, `demo_universal_stm.py`: CLI demos
-- `ultimate_demo_dataset.csv`: Rich demo dataset
-- `aba_therapy_dataset.csv`: ABA therapy dataset (and extended version for same client)
+- `data/`: Curated sample datasets (`ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`, `demo_dataset.csv`, finance and notes variants)
+- `docs/`: LaTeX sources for the accompanying paper
 - `archive/`: Historical docs (safe to remove if not needed)
 - `requirements.txt`: Python dependencies
 
@@ -70,11 +70,11 @@ A structured, interpretable memory system for tracking meaning across time, toke
 - Explain tab with AI explanations (`what_it_means`, `why_these_results`, `what_to_do_next`)
 - AI Insights: domain-aware prompt that infers appropriate time scale (days/weeks/months/quarters) from dataset span
 - Streamlit UX: first-load expanded sidebar, minimized after upload; inline Matplotlib (no blocking windows)
-- Datasets: `ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`
+- Datasets live in `data/` (e.g., `data/ultimate_demo_dataset.csv`, `data/aba_therapy_dataset.csv`)
 ## 📦 Datasets
 
-- `ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
-- `aba_therapy_dataset.csv`: ABA-specific schema/content; extended to a larger set for the same client.
+- `data/ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
+- `data/aba_therapy_dataset.csv`: ABA-specific schema/content; extended to a larger set for the same client.
 
 Upload either via the Streamlit sidebar to explore the full suite of analyses.
 
@@ -108,7 +108,7 @@ If you use this codebase or ideas in your research, please cite the accompanying
 
 ## 📄 Documentation Alignment: Paper/TeX vs. Codebase
 
-This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF) to the codebase. It documents feature completeness and correspondence.
+This section maps the `docs/semantic-tensor-memory.tex` write-up (and associated PDF) to the codebase. It documents feature completeness and correspondence.
 
 ### Overview
 
