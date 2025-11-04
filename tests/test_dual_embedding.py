@@ -4,17 +4,10 @@ Test script for the dual embedding system:
 BERT (token-level) + S-BERT (sentence-level) = Best of both worlds
 """
 
-<<<<<<< HEAD:tests/test_dual_embedding.py
-from semantic_tensor_memory.memory.dual_embedder import DualMemoryStore, create_dual_embedding
-=======
-import sys
-from pathlib import Path
-
-sys.path.append('.')
-sys.path.append(str(Path(__file__).resolve().parent / "src"))
-
-from memory.dual_embedder import DualMemoryStore, create_dual_embedding
->>>>>>> main:test_dual_embedding.py
+from semantic_tensor_memory.memory.dual_embedder import (
+    DualMemoryStore,
+    create_dual_embedding,
+)
 import torch
 import numpy as np
 
@@ -180,4 +173,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main() 
+    main()

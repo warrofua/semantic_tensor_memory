@@ -21,13 +21,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import RobustScaler
 import torch
 
-<<<<<<<< HEAD:src/semantic_tensor_memory/visualization/viz/semantic_drift_river.py
-from .pca_plot import prepare_for_pca
+from .viz.pca_plot import prepare_for_pca
 from semantic_tensor_memory.memory.embedder import embed_sentence
-========
-from .plots import prepare_for_pca
-from memory.embedder import embed_sentence
->>>>>>>> main:src/semantic_tensor_memory/visualization/river.py
 
 
 def extract_concepts_from_text(text: str, method='keyword') -> List[str]:
@@ -1174,4 +1169,4 @@ def render_semantic_drift_river_analysis(memory: List[torch.Tensor], meta: List[
         - Predictive flow modeling
         - Interactive river editing
         - Multi-modal concept streams
-        """) 
+        """)
