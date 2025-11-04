@@ -87,7 +87,7 @@ def build_app(*, include_ai_insights: bool = True) -> AppComponents:
 
     if include_ai_insights:
         try:
-            from ..chat import render_comprehensive_chat_analysis
+            from ..chat.analysis import render_comprehensive_chat_analysis
         except ModuleNotFoundError as exc:
             tabs["ai_insights"] = _missing_dependency_callable(exc)
         else:
