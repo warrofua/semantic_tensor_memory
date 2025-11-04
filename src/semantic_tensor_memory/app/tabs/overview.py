@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 import streamlit as st
 
-from streamlit_plots import plot_heatmap_plotly
+from semantic_tensor_memory.analytics import ConceptAnalyzer
+from semantic_tensor_memory.streamlit.plots import plot_heatmap_plotly
 
 from ..models import get_cached_text_embedder, get_cached_universal_store
 
@@ -104,7 +105,6 @@ def render_overview_dashboard() -> None:
     if st.button("🔍 Generate Quick Analysis", type="primary", key="quick_analysis_btn"):
         with st.spinner("🧠 Analyzing your semantic patterns..."):
             try:
-                from analysis.concept_analysis import ConceptAnalyzer
 
                 if "quick_analysis_store" not in st.session_state:
                     st.session_state.quick_analysis_store = get_cached_universal_store()
@@ -179,7 +179,9 @@ def render_overview_dashboard() -> None:
 
         st.markdown("### 📊 Concept Evolution Timeline")
         try:
-            from visualization.concept_visualizer import visualize_concept_evolution
+            from semantic_tensor_memory.visualization.tools.concept_visualizer import (
+                visualize_concept_evolution,
+            )
 
             fig = visualize_concept_evolution(concept_evolution, "timeline")
             st.plotly_chart(fig, use_container_width=True, key="overview_concept_timeline")

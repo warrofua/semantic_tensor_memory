@@ -44,7 +44,7 @@ def cleanup_memory() -> None:
 @st.cache_resource
 def get_cached_text_embedder():
     """Load and cache the heavy text embedder model exactly once per session."""
-    from memory.text_embedder import TextEmbedder
+    from semantic_tensor_memory.memory.text_embedder import TextEmbedder
 
     st.info("🔄 Loading embedding models (this happens once per session)...")
     embedder = TextEmbedder()
@@ -55,6 +55,6 @@ def get_cached_text_embedder():
 @st.cache_resource
 def get_cached_universal_store():
     """Return a cached universal memory store instance."""
-    from memory.universal_core import UniversalMemoryStore
+    from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
 
     return UniversalMemoryStore()

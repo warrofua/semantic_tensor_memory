@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import streamlit as st
 
-from streamlit_plots import (
+from semantic_tensor_memory.streamlit.plots import (
     create_4d_semantic_space_visualization,
     create_animated_pca_trajectory,
     create_liminal_tunnel_visualization,
@@ -16,9 +16,11 @@ from streamlit_plots import (
     plot_heatmap_plotly,
     robust_pca_pipeline,
 )
-from viz.holistic_semantic_analysis import render_holistic_semantic_analysis
-from viz.semantic_drift_river import render_semantic_drift_river_analysis
-from viz.heatmap import token_alignment_heatmap
+from semantic_tensor_memory.visualization import (
+    render_holistic_semantic_analysis,
+    render_semantic_drift_river_analysis,
+    token_alignment_heatmap,
+)
 
 __all__ = ["render_pattern_analysis_tab"]
 
@@ -146,7 +148,9 @@ def render_pattern_analysis_tab() -> None:
             st.plotly_chart(trajectory_fig, use_container_width=True, key="pattern_animated_trajectory")
             with st.expander("🧠 Axis Explainer (LLM)"):
                 try:
-                    from viz.semantic_analysis import analyze_pca_patterns
+                    from semantic_tensor_memory.visualization import (
+                        analyze_pca_patterns,
+                    )
 
                     reduced = results["reduced"]
                     session_ids = np.array(results["session_ids"])

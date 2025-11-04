@@ -6,8 +6,11 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from alternative_dimensionality import compare_dimensionality_methods, create_alternative_visualization
-from streamlit_plots import (
+from semantic_tensor_memory.analytics import (
+    compare_dimensionality_methods,
+    create_alternative_visualization,
+)
+from semantic_tensor_memory.streamlit.plots import (
     create_4d_semantic_space_visualization,
     create_liminal_tunnel_visualization,
     create_pca_timeline_animation,

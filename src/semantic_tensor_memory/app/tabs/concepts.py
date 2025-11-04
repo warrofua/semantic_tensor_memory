@@ -6,7 +6,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from viz.heatmap import token_alignment_heatmap
+from semantic_tensor_memory.analytics import ConceptAnalyzer
+from semantic_tensor_memory.memory.text_embedder import TextEmbedder
+from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
+from semantic_tensor_memory.visualization import token_alignment_heatmap
 
 __all__ = ["render_enhanced_concept_analysis_tab"]
 
@@ -51,10 +54,6 @@ def render_enhanced_concept_analysis_tab() -> None:
     if st.session_state.get("run_concept_analysis", False):
         with st.spinner("🧠 Analyzing concept evolution using S-BERT embeddings..."):
             try:
-                from analysis.concept_analysis import ConceptAnalyzer
-                from memory.text_embedder import TextEmbedder
-                from memory.universal_core import UniversalMemoryStore
-
                 universal_store = UniversalMemoryStore()
                 text_embedder = TextEmbedder()
 
@@ -118,7 +117,9 @@ def render_enhanced_concept_analysis_tab() -> None:
     )
 
     try:
-        from visualization.concept_visualizer import visualize_concept_evolution
+        from semantic_tensor_memory.visualization.tools.concept_visualizer import (
+            visualize_concept_evolution,
+        )
 
         chart_type_map = {
             "📈 Dashboard": "dashboard",

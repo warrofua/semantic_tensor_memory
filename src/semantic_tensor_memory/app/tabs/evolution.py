@@ -5,13 +5,17 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from semantic_trajectory import (
+from semantic_tensor_memory.analytics import (
     calculate_semantic_trajectory_data,
     create_3d_trajectory_plot,
     display_trajectory_analysis_table,
 )
-from streamlit_plots import plot_drift_plotly
-from viz.heatmap import token_alignment_heatmap
+from semantic_tensor_memory.memory.sequence_drift import (
+    semantic_coherence_score,
+    token_importance_drift,
+)
+from semantic_tensor_memory.streamlit.plots import plot_drift_plotly
+from semantic_tensor_memory.visualization import token_alignment_heatmap
 
 from ..services import compute_drift_series
 
@@ -65,8 +69,6 @@ def render_semantic_evolution_tab() -> None:
                         st.pyplot(fig_align, use_container_width=True)
                 except Exception as exc:  # pragma: no cover - visualization path
                     st.error(f"Token alignment failed: {exc}")
-
-    from memory.sequence_drift import semantic_coherence_score, token_importance_drift
 
     with st.expander("📌 Token Importance Drift & Coherence"):
         try:

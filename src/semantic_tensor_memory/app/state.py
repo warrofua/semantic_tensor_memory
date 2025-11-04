@@ -7,6 +7,9 @@ from typing import Set
 import streamlit as st
 import streamlit.components.v1 as components
 
+from semantic_tensor_memory.memory.universal_core import Modality
+from semantic_tensor_memory.streamlit.utils import initialize_session_state as _initialize_session_state
+
 from .models import cleanup_memory, get_cached_universal_store, get_memory_usage
 
 __all__ = [
@@ -17,13 +20,7 @@ __all__ = [
 
 def initialize_universal_session_state() -> None:
     """Initialize Streamlit session state with universal STM support."""
-    try:
-        from streamlit_utils import initialize_session_state as _init_session_state
-    except Exception:  # pragma: no cover - fallback for offline tests
-        def _init_session_state():
-            pass
-
-    _init_session_state()
+    _initialize_session_state()
 
     if "initial_memory" not in st.session_state:
         st.session_state.initial_memory = get_memory_usage()
@@ -35,8 +32,6 @@ def initialize_universal_session_state() -> None:
         st.session_state.active_modalities = set()
 
     if "modality_sessions" not in st.session_state:
-        from memory.universal_core import Modality
-
         st.session_state.modality_sessions = {modality: [] for modality in Modality}
 
     current_memory = get_memory_usage()
