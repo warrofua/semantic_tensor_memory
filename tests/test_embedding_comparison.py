@@ -4,6 +4,15 @@ Comprehensive comparison of embedding approaches.
 Demonstrates why the dual BERT+S-BERT system is superior to token averaging.
 """
 
+<<<<<<< HEAD:tests/test_embedding_comparison.py
+=======
+import sys
+from pathlib import Path
+
+sys.path.append('.')
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
+
+>>>>>>> main:test_embedding_comparison.py
 import torch
 from semantic_tensor_memory.memory.embedder_config import (
     analyze_embedding_quality,

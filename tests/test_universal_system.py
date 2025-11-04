@@ -6,6 +6,15 @@ Demonstrates the universal architecture working across multiple modalities
 while preserving STM's core concepts and enabling cross-modal analysis.
 """
 
+<<<<<<< HEAD:tests/test_universal_system.py
+=======
+import sys
+from pathlib import Path
+
+sys.path.append('.')
+sys.path.append(str(Path(__file__).resolve().parent / "src"))
+
+>>>>>>> main:test_universal_system.py
 import torch
 import time
 from semantic_tensor_memory.memory.universal_core import (

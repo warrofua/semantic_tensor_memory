@@ -502,7 +502,7 @@ def collect_comprehensive_analysis_data():
         memory_slice = st.session_state.memory
         meta_slice = st.session_state.meta
         
-        # 2D PCA with enhanced pipeline (ragged -> flat handled in viz.pca_plot)
+        # 2D PCA with enhanced pipeline (ragged -> flat handled in semantic_tensor_memory.visualization)
         results_2d = robust_pca_pipeline(memory_slice, meta_slice, n_components=2, method='auto')
         if results_2d:
             analysis_data['pca_2d_analysis'] = {
