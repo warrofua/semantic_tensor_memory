@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from performance_optimizer import AdaptiveDataProcessor
+from semantic_tensor_memory.optimization.performance import AdaptiveDataProcessor
 
 from .models import (
     cleanup_memory,
@@ -330,7 +330,7 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
         st.session_state.memory = memory
         st.session_state.meta = meta
         st.session_state.universal_store = universal_store
-        from memory.store import save
+        from semantic_tensor_memory.memory.store import save
 
         st.session_state.dataset_info = {
             "source": content_type,

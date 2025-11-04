@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from explainability_engine import ExplainabilityEngine
+from semantic_tensor_memory.explainability.engine import ExplainabilityEngine
 
 __all__ = ["render_explainability_dashboard"]
 
