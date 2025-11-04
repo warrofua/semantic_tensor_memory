@@ -3,7 +3,12 @@
 from semantic_tensor_memory.app import build_app
 from semantic_tensor_memory.app.services import compute_drift_series, parse_chat_history
 
-import torch
+import pytest
+
+try:  # pragma: no cover - exercised in minimal test envs
+    import torch
+except ModuleNotFoundError:  # pragma: no cover - exercised in minimal test envs
+    torch = None  # type: ignore[assignment]
 
 
 def test_build_app_structure():
@@ -29,6 +34,7 @@ def test_parse_chat_history_plain_text():
     assert all(hasattr(msg, "content") for msg in messages)
 
 
+@pytest.mark.skipif(torch is None, reason="torch dependency not available")
 def test_compute_drift_series_simple():
     tensors = [torch.ones((1, 4)), torch.ones((1, 4)) * 2]
     drifts, counts = compute_drift_series(tensors)
