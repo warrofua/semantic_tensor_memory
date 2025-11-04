@@ -20,10 +20,10 @@ A structured, interpretable memory system for tracking meaning across time, toke
 
 3. **Start the Streamlit app:**
     ```bash
-    streamlit run semantic_tensor_memory/app/main.py
+    streamlit run app.py
     ```
     - On first load, the sidebar opens to let you upload a CSV. After upload, the sidebar stays minimized for more canvas space.
-    - Try with the curated datasets in `data/` (for example, `data/ultimate_demo_dataset.csv` or `data/aba_therapy_dataset.csv`).
+    - Try with `ultimate_demo_dataset.csv` or `aba_therapy_dataset.csv` in the repo root.
 
 4. **Interactive CLI demo (optional):**
     ```bash
@@ -36,25 +36,25 @@ A structured, interpretable memory system for tracking meaning across time, toke
 ## 🗂️ Project Structure
 
 - `app.py`: Streamlit web application (tabs: Overview, Evolution, Patterns, Dimensionality, Concepts, Explain, AI Insights)
-- `streamlit_utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
-- `streamlit_plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
-- `chat_analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
-- `memory/`: Core memory implementation
+- `src/semantic_tensor_memory/streamlit/utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
+- `src/semantic_tensor_memory/streamlit/plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
+- `src/semantic_tensor_memory/chat/analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
+- `src/semantic_tensor_memory/memory/`: Core memory implementation
   - `universal_core.py`: Universal STM types and `UniversalMemoryStore` (dynamic dims, ragged sequences)
   - `text_embedder.py`: Dual-resolution text embeddings (token-level BERT + sentence-level S-BERT)
   - `embedder.py` / `embedder_sbert.py` / `embedder_hybrid.py`: Embedding backends
   - `drift.py` / `sequence_drift.py`: Drift metrics, token alignment (Hungarian), token-importance drift
   - `store.py`: Storage utilities
-- `tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
-- `viz/`: Visualization tools
+- `src/semantic_tensor_memory/analytics/tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
+- `src/semantic_tensor_memory/visualization/viz/`: Visualization tools
   - `heatmap.py`: Similarity heatmaps, token alignment heatmap (returns Matplotlib Figure)
   - `pca_plot.py`, `pca_summary.py`, `semantic_analysis.py`, `holistic_semantic_analysis.py`
-- `visualization/`: Additional concept visualizers
-- `demo.py`, `demo_universal_stm.py`: CLI demos
-- `data/`: Curated sample datasets (`ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`, `demo_dataset.csv`, finance and notes variants)
-- `docs/`: LaTeX sources for the accompanying paper
+- `src/semantic_tensor_memory/visualization/tools/`: Additional concept visualizers
+- `src/semantic_tensor_memory/demos/`: CLI demos and dataset helpers
+- `ultimate_demo_dataset.csv`: Rich demo dataset
+- `aba_therapy_dataset.csv`: ABA therapy dataset (and extended version for same client)
 - `archive/`: Historical docs (safe to remove if not needed)
-- `requirements.txt`: Python dependencies
+- `pyproject.toml`: Python package metadata and dependencies
 
 ---
 
@@ -70,11 +70,11 @@ A structured, interpretable memory system for tracking meaning across time, toke
 - Explain tab with AI explanations (`what_it_means`, `why_these_results`, `what_to_do_next`)
 - AI Insights: domain-aware prompt that infers appropriate time scale (days/weeks/months/quarters) from dataset span
 - Streamlit UX: first-load expanded sidebar, minimized after upload; inline Matplotlib (no blocking windows)
-- Datasets live in `data/` (e.g., `data/ultimate_demo_dataset.csv`, `data/aba_therapy_dataset.csv`)
+- Datasets: `ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`
 ## 📦 Datasets
 
-- `data/ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
-- `data/aba_therapy_dataset.csv`: ABA-specific schema/content; extended to a larger set for the same client.
+- `ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
+- `aba_therapy_dataset.csv`: ABA-specific schema/content; extended to a larger set for the same client.
 
 Upload either via the Streamlit sidebar to explore the full suite of analyses.
 
@@ -108,7 +108,7 @@ If you use this codebase or ideas in your research, please cite the accompanying
 
 ## 📄 Documentation Alignment: Paper/TeX vs. Codebase
 
-This section maps the `docs/semantic-tensor-memory.tex` write-up (and associated PDF) to the codebase. It documents feature completeness and correspondence.
+This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF) to the codebase. It documents feature completeness and correspondence.
 
 ### Overview
 
