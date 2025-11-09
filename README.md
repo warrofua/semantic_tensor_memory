@@ -161,12 +161,5 @@ This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF)
 
 - Port 8501 in use: `lsof -ti:8501 | xargs -r kill -9`
 - Ollama not running: install/start Ollama and pull a model (e.g., `qwen3:latest`).
-- Matplotlib blocking window: fixed — figures are returned and rendered inline in Streamlit.
 - PyTorch view/reshape error: the PCA pipeline uses `.reshape(...)` and contiguous tensors in `tensor_batching.py`.
 - `pytest` not found: install via `pip install pytest` or use the app directly.
-
----
-
-## 🗃️ Archive folder
-
-The `archive/` directory contains historical documents and is not required at runtime. You can remove it if you prefer a lean repo.
