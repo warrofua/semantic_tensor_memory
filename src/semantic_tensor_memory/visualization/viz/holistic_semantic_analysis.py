@@ -1,4 +1,3 @@
-"""
 """semantic_tensor_memory.visualization.holistic
 =================================================
 

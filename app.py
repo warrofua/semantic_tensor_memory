@@ -20,6 +20,7 @@ import torch
 import gc
 import psutil
 from pathlib import Path
+import sys
 import plotly.graph_objects as go
 import plotly.express as px
 from sklearn.manifold import TSNE
@@ -28,6 +29,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 
 BASE_DIR = Path(__file__).resolve().parent
+SRC_DIR = BASE_DIR / "src"
+if SRC_DIR.exists() and str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))  # Ensure local package is importable when running without installation
 DEMO_DATA_PATH = BASE_DIR / "data" / "ultimate_demo_dataset.csv"
 
 # Fix PyTorch/Streamlit compatibility issues
@@ -83,6 +87,9 @@ from semantic_tensor_memory.visualization import (
     render_holistic_semantic_analysis,
     token_alignment_heatmap,
     generate_narrative_summary,
+)
+from semantic_tensor_memory.visualization.tools.concept_visualizer import (
+    visualize_concept_evolution,
 )
 from semantic_tensor_memory.chat.analysis import render_comprehensive_chat_analysis
 # Chat history analysis (unified with main processing)
@@ -936,7 +943,6 @@ def render_overview_dashboard():
         # Quick visualization
         st.markdown("### 📊 Concept Evolution Timeline")
         try:
-            from visualization.concept_visualizer import visualize_concept_evolution
             fig = visualize_concept_evolution(concept_evolution, "timeline")
             st.plotly_chart(fig, use_container_width=True, key="overview_concept_timeline")
         except Exception as e:
@@ -1764,9 +1770,8 @@ def render_enhanced_concept_analysis_tab():
     if st.session_state.get('run_concept_analysis', False):
         with st.spinner("🧠 Analyzing concept evolution using S-BERT embeddings..."):
             try:
-                # Import enhanced concept analysis
+                # Import enhanced concept analysis helpers
                 from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer
-                from visualization.concept_visualizer import visualize_concept_evolution
                 
                 # Create Universal STM store from existing memory
                 from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
@@ -1845,8 +1850,6 @@ def render_enhanced_concept_analysis_tab():
         
         # Generate visualization
         try:
-            from visualization.concept_visualizer import visualize_concept_evolution
-            
             chart_type_map = {
                 "📈 Dashboard": "dashboard",
                 "🔥 Cluster Heatmap": "heatmap", 

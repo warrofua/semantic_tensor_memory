@@ -1,5 +1,5 @@
 """
-"""semantic_tensor_memory.visualization.holistic
+semantic_tensor_memory.visualization.holistic
 =================================================
 
 High-level exploratory visualisations that surface global semantic trends. The
