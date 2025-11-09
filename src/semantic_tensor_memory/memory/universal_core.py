@@ -9,8 +9,8 @@ portable regardless of the device used for inference or storage.
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field, replace
 from copy import deepcopy
-from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Union, Tuple
 import torch
 from enum import Enum
@@ -161,26 +161,44 @@ class UniversalMemoryStore:
     all modalities while preserving STM's core tensor memory capabilities.
     """
     
-    def __init__(self, storage_path: Optional[str] = None, *,
-                 storage_map_location: Union[str, torch.device] = "cpu"):
+    def __init__(self, storage_path: Optional[str] = None, storage_device: Union[str, torch.device] = "cpu"):
         self.embeddings: List[UniversalEmbedding] = []
         self.modality_counts: Dict[Modality, int] = {}
         self.storage_path = Path(storage_path) if storage_path else Path("data/universal")
         self.storage_path.mkdir(parents=True, exist_ok=True)
-        self.storage_map_location: Union[str, torch.device] = storage_map_location
-    
+        self.storage_device = torch.device(storage_device)
+
     def add_session(self, embedding: UniversalEmbedding) -> int:
         """Add a universal embedding session to memory."""
+        # Ensure tensors are detached and stored on the configured device
+        event_embeddings = None
+        if embedding.event_embeddings is not None:
+            event_embeddings = (
+                embedding.event_embeddings.detach().to(self.storage_device).clone()
+            )
+
+        sequence_embedding = None
+        if embedding.sequence_embedding is not None:
+            sequence_embedding = (
+                embedding.sequence_embedding.detach().to(self.storage_device).clone()
+            )
+
+        sanitized_embedding = replace(
+            embedding,
+            event_embeddings=event_embeddings,
+            sequence_embedding=sequence_embedding,
+        )
+
         session_index = len(self.embeddings)
-        self.embeddings.append(embedding)
-        
+        self.embeddings.append(sanitized_embedding)
+
         # Update modality counts
-        modality = embedding.modality
+        modality = sanitized_embedding.modality
         self.modality_counts[modality] = self.modality_counts.get(modality, 0) + 1
-        
+
         # Save to storage
-        self._save_session(embedding, session_index)
-        
+        self._save_session(sanitized_embedding, session_index)
+
         return session_index
     
     def get_sessions_by_modality(self, modality: Modality) -> List[Tuple[int, UniversalEmbedding]]:
@@ -198,10 +216,17 @@ class UniversalMemoryStore:
     def get_sequence_tensors(self, modality: Optional[Modality] = None) -> torch.Tensor:
         """Get sequence-level tensors for semantic analysis."""
         if modality:
-            sequences = [emb.sequence_embedding for emb in self.embeddings 
-                        if emb.modality == modality]
+            sequences = [
+                emb.sequence_embedding.to(self.storage_device)
+                for emb in self.embeddings
+                if emb.modality == modality and emb.sequence_embedding is not None
+            ]
         else:
-            sequences = [emb.sequence_embedding for emb in self.embeddings]
+            sequences = [
+                emb.sequence_embedding.to(self.storage_device)
+                for emb in self.embeddings
+                if emb.sequence_embedding is not None
+            ]
 
         if not sequences:
             # Return an empty tensor with dynamic embedding dimension if known, else 0
@@ -210,19 +235,19 @@ class UniversalMemoryStore:
                 if emb.sequence_embedding is not None:
                     default_dim = emb.sequence_embedding.shape[-1]
                     break
-            return torch.empty(0, default_dim)
+            return torch.empty(0, default_dim, device=self.storage_device)
 
         # Ensure all tensors have the same dimension
         dim = sequences[0].shape[-1]
         sequences = [s.view(-1) if s.ndim == 1 else s.squeeze(0) for s in sequences]
-        stacked = torch.stack(sequences)
+        stacked = torch.stack(sequences).to(self.storage_device)
         if stacked.shape[-1] != dim:
             # As a safeguard, coerce to min common dim
             min_dim = min(s.shape[-1] for s in sequences)
             trimmed = [s[..., :min_dim] for s in sequences]
-            return torch.stack(trimmed)
+            return torch.stack(trimmed).to(self.storage_device)
         return stacked
-    
+
     def analyze_cross_modal_drift(self, session_a: int, session_b: int) -> Dict[str, Any]:
         """
         Analyze semantic drift between sessions, potentially across modalities.
@@ -234,15 +259,19 @@ class UniversalMemoryStore:
         emb_b = self.embeddings[session_b]
         
         # Sequence-level similarity (cross-modal compatible)
+        seq_a = emb_a.sequence_embedding.to(self.storage_device)
+        seq_b = emb_b.sequence_embedding.to(self.storage_device)
         sequence_similarity = torch.cosine_similarity(
-            emb_a.sequence_embedding, emb_b.sequence_embedding, dim=0
+            seq_a, seq_b, dim=0
         ).item()
-        
+
         # Event-level analysis (if same modality)
         event_analysis = {}
         if emb_a.modality == emb_b.modality:
+            events_a = emb_a.event_embeddings.to(self.storage_device)
+            events_b = emb_b.event_embeddings.to(self.storage_device)
             event_similarity = torch.cosine_similarity(
-                emb_a.event_embeddings.mean(0), emb_b.event_embeddings.mean(0), dim=0
+                events_a.mean(0), events_b.mean(0), dim=0
             ).item()
             event_analysis = {
                 'event_similarity': event_similarity,

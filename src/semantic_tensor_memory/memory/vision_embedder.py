@@ -155,18 +155,20 @@ class VisionEmbedder(ModalityEmbedder):
         - Event embeddings: Individual concept embeddings
         - Sequence embedding: Overall scene embedding
         """
+        target_device = torch.device("cpu")
+
         if not events:
             # Create empty embeddings for no events
-            event_embeddings = torch.zeros(1, self._embedding_dim)
-            sequence_embedding = torch.zeros(self._embedding_dim)
+            event_embeddings = torch.zeros(1, self._embedding_dim, device=target_device)
+            sequence_embedding = torch.zeros(self._embedding_dim, device=target_device)
         else:
             # Get image from first event metadata
             # Note: In a real implementation, you'd want to store the processed image
             # For now, we'll create embeddings based on detected concepts
-            
+
             # Event-level embeddings: Encode detected concepts
             event_texts = [event.metadata.get('detected_concept', event.event_type) for event in events]
-            
+
             with torch.no_grad():
                 # Encode each detected concept separately
                 event_embeddings_list = []
@@ -174,15 +176,20 @@ class VisionEmbedder(ModalityEmbedder):
                     text_tokens = clip.tokenize([text]).to(self.device)
                     text_features = self.model.encode_text(text_tokens)
                     event_embeddings_list.append(text_features.squeeze(0))
-                
-                event_embeddings = torch.stack(event_embeddings_list)
-                
+
+                event_embeddings = torch.stack(event_embeddings_list).to(target_device)
+
                 # Sequence-level embedding: Combined scene understanding
                 # Create a description of the overall scene
                 scene_description = f"A scene containing: {', '.join(event_texts[:5])}"  # Limit length
                 scene_tokens = clip.tokenize([scene_description]).to(self.device)
-                sequence_embedding = self.model.encode_text(scene_tokens).squeeze(0)
-        
+                sequence_embedding = self.model.encode_text(scene_tokens).squeeze(0).to(target_device)
+
+        if event_embeddings.device != target_device:
+            event_embeddings = event_embeddings.to(target_device)
+        if sequence_embedding.device != target_device:
+            sequence_embedding = sequence_embedding.to(target_device)
+
         # Calculate quality metrics
         event_coherence = self._calculate_visual_coherence(events)
         sequence_coherence = torch.norm(sequence_embedding).item()
