@@ -6,14 +6,29 @@ Tests the new concept analysis features to ensure they work with existing S-BERT
 """
 
 import torch
-import numpy as np
-from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
+import pytest
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - handled via pytest skip
+    np = None
+from semantic_tensor_memory.memory.universal_core import (
+    UniversalMemoryStore,
+    UniversalEmbedding,
+    Modality,
+)
 from semantic_tensor_memory.memory.text_embedder import TextEmbedder
 from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer, analyze_existing_store_concepts
-from semantic_tensor_memory.visualization.tools.concept_visualizer import visualize_concept_evolution
 
 def test_concept_analysis():
     """Test the enhanced concept analysis pipeline."""
+    if np is None:
+        pytest.skip("numpy is required for concept analysis test")
+
+    from semantic_tensor_memory.visualization.tools.concept_visualizer import (
+        visualize_concept_evolution,
+    )
+
     print("🧠 Testing Enhanced Concept Analysis...")
     
     # Create test data with diverse concepts
@@ -65,7 +80,7 @@ def test_concept_analysis():
     
     print("\nTesting concept velocity...")
     velocities = analyzer.analyze_concept_velocity()
-    if velocities:
+    if velocities and np is not None:
         print(f"Velocity range: {min(velocities):.3f} - {max(velocities):.3f}")
         print(f"Average velocity: {np.mean(velocities):.3f}")
     
@@ -104,6 +119,41 @@ def test_concept_analysis():
     
     print("\n🎉 Concept analysis test completed!")
     return evolution
+
+
+def test_concept_clustering_with_limited_sessions():
+    """Regression test: clustering when requested clusters exceed available sessions."""
+
+    store = UniversalMemoryStore()
+
+    def _make_embedding(session_idx: int) -> UniversalEmbedding:
+        base = float(session_idx + 1)
+        event_embeddings = torch.tensor([[base, base + 1, base + 2, base + 3]])
+        sequence_embedding = torch.tensor([base + 10, base + 11, base + 12, base + 13])
+        return UniversalEmbedding(
+            event_embeddings=event_embeddings,
+            sequence_embedding=sequence_embedding,
+            modality=Modality.TEXT,
+            events=[],
+            session_id=f"limited_session_{session_idx}",
+            timestamp=base,
+            duration=0.0,
+            sensor_metadata={},
+            processing_metadata={},
+            event_coherence=1.0,
+            sequence_coherence=1.0,
+            extraction_confidence=1.0,
+        )
+
+    for idx in range(1):
+        store.add_session(_make_embedding(idx))
+
+    analyzer = ConceptAnalyzer(store)
+    clusters = analyzer.analyze_concept_clusters(n_clusters=5)
+
+    assert len(store.embeddings) == 1
+    assert len(clusters) == 1
+    assert clusters[0].session_indices == [0]
 
 def test_similarity_matrix():
     """Test the concept similarity matrix functionality."""

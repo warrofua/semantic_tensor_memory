@@ -303,6 +303,13 @@ if "torch" not in sys.modules:
     torch_stub.triu = _triu
     torch_stub.mm = _mm
 
+    def _save(obj, path):
+        file_path = Path(path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(b"")
+
+    torch_stub.save = _save
+
     def _inference_mode(func=None):
         if func is None:
             def wrapper(f):
@@ -535,18 +542,136 @@ def stub_embeddings(monkeypatch):
     )
 
 # Lightweight stubs for external transformer libraries
+if "numpy" not in sys.modules:
+    numpy_stub = ModuleType("numpy")
+
+    def _to_list(values):
+        if hasattr(values, "tolist"):
+            return values.tolist()
+        if isinstance(values, list):
+            return values
+        return list(values)
+
+    def _mean(values):
+        data = _to_list(values)
+        return sum(data) / len(data) if data else 0.0
+
+    def array(values):
+        return _to_list(values)
+
+    def asarray(values):
+        return _to_list(values)
+
+    def mean(values, axis=None):
+        if axis is not None:
+            return _mean(values)
+        return _mean(values)
+
+    def triu_indices_from(matrix, k=0):
+        data = _to_list(matrix)
+        size = len(data)
+        rows, cols = [], []
+        for i in range(size):
+            for j in range(i + max(k, 1), size):
+                rows.append(i)
+                cols.append(j)
+        return rows, cols
+
+    def where(condition):
+        indices = [idx for idx, flag in enumerate(condition) if flag]
+        return (indices,)
+
+    numpy_stub.array = array
+    numpy_stub.asarray = asarray
+    numpy_stub.mean = mean
+    numpy_stub.triu_indices_from = triu_indices_from
+    numpy_stub.where = where
+    numpy_stub.ndarray = list
+
+    sys.modules["numpy"] = numpy_stub
+
+if "sklearn" not in sys.modules:
+    sklearn_stub = ModuleType("sklearn")
+    cluster_module = ModuleType("cluster")
+    manifold_module = ModuleType("manifold")
+    metrics_module = ModuleType("metrics")
+    pairwise_module = ModuleType("pairwise")
+
+    class _StubKMeans:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("KMeans stub requires numpy/scikit-learn")
+
+    class _StubTSNE:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("TSNE stub requires numpy/scikit-learn")
+
+    def _cosine_similarity(a, b=None):
+        raise RuntimeError("cosine_similarity stub requires numpy/scikit-learn")
+
+    cluster_module.KMeans = _StubKMeans
+    manifold_module.TSNE = _StubTSNE
+    pairwise_module.cosine_similarity = _cosine_similarity
+    metrics_module.pairwise = pairwise_module
+    sklearn_stub.cluster = cluster_module
+    sklearn_stub.manifold = manifold_module
+    sklearn_stub.metrics = metrics_module
+    sys.modules["sklearn"] = sklearn_stub
+    sys.modules["sklearn.cluster"] = cluster_module
+    sys.modules["sklearn.manifold"] = manifold_module
+    sys.modules["sklearn.metrics"] = metrics_module
+    sys.modules["sklearn.metrics.pairwise"] = pairwise_module
+
+if "pandas" not in sys.modules:
+    pandas_stub = ModuleType("pandas")
+
+    class _DataFrame:
+        def __init__(self, *args, **kwargs):
+            self._data = args[0] if args else {}
+
+        def to_dict(self):
+            return self._data
+
+    pandas_stub.DataFrame = _DataFrame
+    pandas_stub.Series = list
+
+    sys.modules["pandas"] = pandas_stub
+
 if "transformers" not in sys.modules:
     transformers_stub = ModuleType("transformers")
 
     class _AutoTokenizer:
+        def __call__(self, text, return_tensors="pt", truncation=True, padding=False):
+            tokens = str(text).split()
+            length = len(tokens) + 2
+            input_ids = torch.arange(length, dtype=torch.long).unsqueeze(0)
+            return {"input_ids": input_ids}
+
+        def convert_ids_to_tokens(self, ids):
+            flat_ids = ids.view(-1) if hasattr(ids, "view") else ids
+            return [f"tok{i}" for i in flat_ids.tolist()]
+
         @classmethod
         def from_pretrained(cls, *args, **kwargs):
-            raise RuntimeError("Stub tokenizer - use monkeypatch in tests")
+            return cls()
 
     class _AutoModel:
+        def __init__(self):
+            self.config = SimpleNamespace(hidden_size=4)
+
+        def __call__(self, **kwargs):
+            input_ids = kwargs.get("input_ids")
+            if hasattr(input_ids, "shape"):
+                seq_len = input_ids.shape[1]
+            else:
+                seq_len = len(input_ids[0]) if input_ids else 0
+            dim = self.config.hidden_size
+            values = [[float(i * dim + j) for j in range(dim)] for i in range(seq_len)]
+            tensor = torch.tensor(values).unsqueeze(0)
+            return SimpleNamespace(last_hidden_state=tensor)
+
         @classmethod
         def from_pretrained(cls, *args, **kwargs):
-            raise RuntimeError("Stub model - use monkeypatch in tests")
+            return cls()
 
     transformers_stub.AutoTokenizer = _AutoTokenizer
     transformers_stub.AutoModel = _AutoModel
@@ -557,13 +682,14 @@ if "sentence_transformers" not in sys.modules:
 
     class _SentenceTransformer:
         def __init__(self, *args, **kwargs):
-            pass
+            self._dim = 4
 
         def get_sentence_embedding_dimension(self):
-            return 0
+            return self._dim
 
         def encode(self, text, convert_to_tensor=True, show_progress_bar=False):
-            return []
+            vec = torch.arange(self._dim, dtype=torch.float)
+            return vec if convert_to_tensor else vec.tolist()
 
     sentence_stub.SentenceTransformer = _SentenceTransformer
     sys.modules["sentence_transformers"] = sentence_stub
