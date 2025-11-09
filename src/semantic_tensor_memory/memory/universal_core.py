@@ -10,7 +10,6 @@ portable regardless of the device used for inference or storage.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from copy import deepcopy
 from typing import Dict, List, Any, Optional, Union, Tuple
 import torch
 from enum import Enum
@@ -305,15 +304,19 @@ class UniversalMemoryStore:
     def _save_session(self, embedding: UniversalEmbedding, index: int):
         """Save session to persistent storage."""
         session_file = self.storage_path / f"session_{index:06d}_{embedding.modality.value}.pkl"
-        embedding_to_save = deepcopy(embedding)
-        if isinstance(embedding_to_save.event_embeddings, torch.Tensor):
-            embedding_to_save.event_embeddings = (
-                embedding_to_save.event_embeddings.detach().to("cpu")
-            )
-        if isinstance(embedding_to_save.sequence_embedding, torch.Tensor):
-            embedding_to_save.sequence_embedding = (
-                embedding_to_save.sequence_embedding.detach().to("cpu")
-            )
+        event_embeddings = embedding.event_embeddings
+        if isinstance(event_embeddings, torch.Tensor):
+            event_embeddings = event_embeddings.detach().to("cpu")
+
+        sequence_embedding = embedding.sequence_embedding
+        if isinstance(sequence_embedding, torch.Tensor):
+            sequence_embedding = sequence_embedding.detach().to("cpu")
+
+        embedding_to_save = replace(
+            embedding,
+            event_embeddings=event_embeddings,
+            sequence_embedding=sequence_embedding,
+        )
         torch.save(embedding_to_save, session_file)
 
     def load_from_storage(self):
