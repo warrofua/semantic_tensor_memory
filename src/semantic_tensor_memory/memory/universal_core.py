@@ -1,13 +1,16 @@
 """
 Universal Multimodal Semantic Tensor Memory - Core Architecture
 
-This module defines the foundational interfaces and data structures for 
+This module defines the foundational interfaces and data structures for
 universal multimodal semantic memory that works across text, vision, audio,
-sensors, and any future modalities.
+sensors, and any future modalities.  Saved sessions are always persisted with
+CPU tensors and deserialized with an explicit map location so they remain
+portable regardless of the device used for inference or storage.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
+from copy import deepcopy
 from typing import Dict, List, Any, Optional, Union, Tuple
 import torch
 from enum import Enum
@@ -302,17 +305,26 @@ class UniversalMemoryStore:
     def _save_session(self, embedding: UniversalEmbedding, index: int):
         """Save session to persistent storage."""
         session_file = self.storage_path / f"session_{index:06d}_{embedding.modality.value}.pkl"
-        torch.save(embedding, session_file)
-    
+        embedding_to_save = deepcopy(embedding)
+        if isinstance(embedding_to_save.event_embeddings, torch.Tensor):
+            embedding_to_save.event_embeddings = (
+                embedding_to_save.event_embeddings.detach().to("cpu")
+            )
+        if isinstance(embedding_to_save.sequence_embedding, torch.Tensor):
+            embedding_to_save.sequence_embedding = (
+                embedding_to_save.sequence_embedding.detach().to("cpu")
+            )
+        torch.save(embedding_to_save, session_file)
+
     def load_from_storage(self):
         """Load existing sessions from storage."""
         if not self.storage_path.exists():
             return
-        
+
         session_files = sorted(self.storage_path.glob("session_*.pkl"))
         for session_file in session_files:
             try:
-                embedding = torch.load(session_file)
+                embedding = torch.load(session_file, map_location=self.storage_map_location)
                 self.embeddings.append(embedding)
                 modality = embedding.modality
                 self.modality_counts[modality] = self.modality_counts.get(modality, 0) + 1
