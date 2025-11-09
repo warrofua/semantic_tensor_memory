@@ -104,16 +104,38 @@ class ConceptAnalyzer:
         Cluster sessions by concept similarity using existing S-BERT embeddings.
         """
         sequence_tensors, metadata = self._extract_sequence_data(modality)
-        
+        n_samples = sequence_tensors.shape[0]
+
+        if n_samples == 0:
+            return []
+
+        if n_samples == 1:
+            centroid = sequence_tensors[0]
+            session_indices = [0]
+            representative_text = metadata[0]['text_sample'] if metadata else ""
+            theme_keywords = self._extract_cluster_themes(session_indices, metadata)
+            return [
+                ConceptCluster(
+                    cluster_id=0,
+                    session_indices=session_indices,
+                    centroid=centroid,
+                    coherence_score=1.0,
+                    representative_text=representative_text,
+                    theme_keywords=theme_keywords,
+                )
+            ]
+
+        effective_clusters = min(n_clusters, n_samples)
+
         # Use existing S-BERT embeddings for clustering
         embeddings_np = sequence_tensors.cpu().numpy()
-        
+
         # K-means clustering on concept space
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        kmeans = KMeans(n_clusters=effective_clusters, random_state=42, n_init=10)
         cluster_labels = kmeans.fit_predict(embeddings_np)
-        
+
         clusters = []
-        for cluster_id in range(n_clusters):
+        for cluster_id in range(effective_clusters):
             # Find sessions in this cluster
             cluster_mask = cluster_labels == cluster_id
             session_indices = np.where(cluster_mask)[0].tolist()
