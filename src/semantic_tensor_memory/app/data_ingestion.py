@@ -455,8 +455,9 @@ def render_upload_screen() -> None:
             )
 
         st.markdown("### 🎯 Try Example Datasets")
+        st.caption("Loads the bundled `ultimate_demo_dataset.csv` sample journey.")
         if st.button("📚 Load Demo Dataset", type="primary"):
-            demo_path = "demo_dataset.csv"
+            demo_path = os.path.join("data", "ultimate_demo_dataset.csv")
             if os.path.exists(demo_path):
                 with open(demo_path, "rb") as file_handle:
                     content = file_handle.read()
@@ -464,7 +465,7 @@ def render_upload_screen() -> None:
                     "MockFile",
                     (),
                     {
-                        "name": "demo_dataset.csv",
+                        "name": "ultimate_demo_dataset.csv",
                         "read": lambda: content,
                         "seek": lambda _pos: None,
                     },
@@ -472,7 +473,9 @@ def render_upload_screen() -> None:
                 if handle_unified_upload(mock_file):
                     st.rerun()
             else:
-                st.error("Demo dataset not found. Please upload your own file.")
+                st.error(
+                    f"Demo dataset not found at {demo_path}. Please upload your own file."
+                )
 
         st.markdown(
             """

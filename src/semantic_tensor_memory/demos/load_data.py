@@ -21,7 +21,7 @@ import streamlit as st
 from datetime import datetime
 
 DATA_ROOT = Path(__file__).resolve().parents[3]
-DEMO_DATA_PATH = DATA_ROOT / "demo_dataset.csv"
+DEMO_DATA_PATH = DATA_ROOT / "data" / "ultimate_demo_dataset.csv"
 
 def load_demo_dataset():
     """Load the demonstration dataset and return analysis insights."""
@@ -30,7 +30,7 @@ def load_demo_dataset():
     data_path = DEMO_DATA_PATH
     if not data_path.exists():
         raise FileNotFoundError(
-            "demo_dataset.csv not found. Ensure the dataset is located in the project root."
+            "ultimate_demo_dataset.csv not found. Ensure the dataset is located in the project's data directory."
         )
 
     df = pd.read_csv(data_path)
@@ -115,7 +115,7 @@ def get_streamlit_import_instructions():
     
     1. Open your Semantic Tensor Memory app at http://localhost:8501
     2. In the sidebar, use "Import sessions from CSV"
-    3. Upload the file: demo_dataset.csv
+    3. Upload the file: ultimate_demo_dataset.csv
     4. The app will load 30 sessions showing a complete learning journey
     
     🔬 RECOMMENDED ANALYSIS WORKFLOW:
