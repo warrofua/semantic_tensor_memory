@@ -98,11 +98,18 @@ def convert_ai_conversation_to_sessions(messages) -> List[Dict[str, Any]]:
     user_messages = [msg for msg in messages if getattr(msg, "role", "") == "user"]
 
     for i, msg in enumerate(user_messages):
+        raw_timestamp = getattr(msg, "timestamp", None)
+        if raw_timestamp is not None:
+            iso_formatter = getattr(raw_timestamp, "isoformat", None)
+            timestamp = iso_formatter() if callable(iso_formatter) else raw_timestamp
+        else:
+            timestamp = None
+
         sessions.append(
             {
                 "text": msg.content,
                 "session_id": i,
-                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "timestamp": timestamp,
                 "conversation_id": getattr(msg, "conversation_id", "unknown"),
                 "message_id": getattr(msg, "message_id", f"msg_{i}"),
                 "source_type": "ai_conversation",
