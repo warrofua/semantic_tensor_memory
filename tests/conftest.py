@@ -5,6 +5,7 @@ from types import ModuleType, SimpleNamespace
 import importlib
 import hashlib
 import math
+import pickle
 
 import pytest
 
@@ -172,6 +173,15 @@ class _Tensor:
         for item in self._data:
             yield _Tensor(item, self._dtype if isinstance(item, list) else "float")
 
+    def detach(self):
+        return _Tensor(self._data, self._dtype)
+
+    def clone(self):
+        return _Tensor(_clone(self._data), self._dtype)
+
+    def to(self, *args, **kwargs):
+        return self
+
     def __len__(self):
         if isinstance(self._data, list):
             return len(self._data)
@@ -213,6 +223,12 @@ if "torch" not in sys.modules:
     torch_stub.Tensor = _Tensor
     torch_stub.float32 = "float"
     torch_stub.long = "long"
+
+    class _Device(str):
+        pass
+
+    def _device(spec):
+        return _Device(str(spec))
 
     def _tensor(data, dtype=None):
         dtype_label = "long" if dtype == torch_stub.long else "float"
@@ -302,13 +318,22 @@ if "torch" not in sys.modules:
     torch_stub.ones = _ones
     torch_stub.triu = _triu
     torch_stub.mm = _mm
+    torch_stub.device = _device
 
     def _save(obj, path):
         file_path = Path(path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_bytes(b"")
+        file_path.write_bytes(pickle.dumps(obj))
 
     torch_stub.save = _save
+
+    def _load(path, map_location=None):
+        file_path = Path(path)
+        if not file_path.exists():
+            raise FileNotFoundError(path)
+        return pickle.loads(file_path.read_bytes())
+
+    torch_stub.load = _load
 
     def _inference_mode(func=None):
         if func is None:
@@ -325,6 +350,15 @@ if "torch" not in sys.modules:
     functional_module.cosine_similarity = _cosine_similarity_tensor
     nn_module.functional = functional_module
     torch_stub.nn = nn_module
+
+    testing_module = ModuleType("testing")
+
+    def _assert_close(actual, expected, rtol=1e-5, atol=1e-8):
+        if not _allclose(actual, expected, atol=atol, rtol=rtol):
+            raise AssertionError("Tensors are not close")
+
+    testing_module.assert_close = _assert_close
+    torch_stub.testing = testing_module
 
     sys.modules["torch"] = torch_stub
 

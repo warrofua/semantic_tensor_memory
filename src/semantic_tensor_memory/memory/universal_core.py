@@ -316,6 +316,10 @@ class UniversalMemoryStore:
             )
         torch.save(embedding_to_save, session_file)
 
+    def _get_map_location(self) -> torch.device:
+        """Return the map location for loading persisted tensors."""
+        return self.storage_device
+
     def load_from_storage(self):
         """Load existing sessions from storage."""
         if not self.storage_path.exists():
@@ -324,7 +328,7 @@ class UniversalMemoryStore:
         session_files = sorted(self.storage_path.glob("session_*.pkl"))
         for session_file in session_files:
             try:
-                embedding = torch.load(session_file, map_location=self.storage_map_location)
+                embedding = torch.load(session_file, map_location=self._get_map_location())
                 self.embeddings.append(embedding)
                 modality = embedding.modality
                 self.modality_counts[modality] = self.modality_counts.get(modality, 0) + 1
