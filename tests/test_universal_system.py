@@ -9,7 +9,7 @@ while preserving STM's core concepts and enabling cross-modal analysis.
 import torch
 import time
 from semantic_tensor_memory.memory.universal_core import (
-    UniversalMemoryStore, Modality, create_universal_embedder
+    UniversalMemoryStore, Modality, create_universal_embedder, EventDescriptor, UniversalEmbedding
 )
 from semantic_tensor_memory.memory.text_embedder import TextEmbedder, create_text_embedding
 
@@ -198,6 +198,66 @@ def test_modality_factory():
         print(f"✅ Audio embedder: {type(audio_embedder).__name__}")
     except NotImplementedError as e:
         print(f"⚠️  Audio embedder (expected): {e}")
+
+
+def test_universal_memory_store_persistence(tmp_path):
+    """UniversalMemoryStore restores persisted sessions without data loss."""
+
+    storage_dir = tmp_path / "universal_sessions"
+    store = UniversalMemoryStore(storage_path=str(storage_dir))
+
+    event_embeddings = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    sequence_embedding = torch.tensor([0.1, 0.2, 0.3])
+    events = [
+        EventDescriptor(
+            event_type="text_token_doc",
+            confidence=1.0,
+            timestamp=0.0,
+            duration=None,
+            location="position_0",
+            metadata={"token": "doc"},
+        )
+    ]
+
+    embedding = UniversalEmbedding(
+        event_embeddings=event_embeddings,
+        sequence_embedding=sequence_embedding,
+        modality=Modality.TEXT,
+        events=events,
+        session_id="persist_test",
+        timestamp=123.0,
+        duration=1.0,
+        sensor_metadata={},
+        processing_metadata={},
+        event_coherence=0.9,
+        sequence_coherence=0.8,
+        extraction_confidence=1.0,
+    )
+
+    store.add_session(embedding)
+
+    original_embedding = store.embeddings[0]
+    original_counts = dict(store.modality_counts)
+
+    reloaded_store = UniversalMemoryStore(storage_path=str(storage_dir))
+    reloaded_store.load_from_storage()
+
+    assert len(reloaded_store.embeddings) == 1
+
+    loaded_embedding = reloaded_store.embeddings[0]
+    torch.testing.assert_close(
+        original_embedding.event_embeddings,
+        loaded_embedding.event_embeddings,
+        rtol=1e-5,
+        atol=1e-7,
+    )
+    torch.testing.assert_close(
+        original_embedding.sequence_embedding,
+        loaded_embedding.sequence_embedding,
+        rtol=1e-5,
+        atol=1e-7,
+    )
+    assert reloaded_store.modality_counts == original_counts
 
 def test_backward_compatibility():
     """Test backward compatibility with existing STM code."""
