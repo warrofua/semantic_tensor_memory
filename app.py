@@ -28,7 +28,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 
 BASE_DIR = Path(__file__).resolve().parent
-DEMO_DATA_PATH = BASE_DIR / "demo_dataset.csv"
+DEMO_DATA_PATH = BASE_DIR / "data" / "ultimate_demo_dataset.csv"
 
 # Fix PyTorch/Streamlit compatibility issues
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -690,7 +690,8 @@ def render_upload_screen():
         
         # Example datasets
         st.markdown("### 🎯 Try Example Datasets")
-        
+        st.caption("Loads the bundled `ultimate_demo_dataset.csv` sample journey.")
+
         if st.button("📚 Load Demo Dataset", type="primary"):
             # Check if demo dataset exists
             if DEMO_DATA_PATH.exists():
@@ -703,7 +704,9 @@ def render_upload_screen():
                     if handle_unified_upload(mock_file):
                         st.rerun()
             else:
-                st.error("Demo dataset not found. Please upload your own file.")
+                st.error(
+                    f"Demo dataset not found at {DEMO_DATA_PATH}. Please upload your own file."
+                )
         
         st.markdown("""
         <div style="background: #f0f2f6; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">

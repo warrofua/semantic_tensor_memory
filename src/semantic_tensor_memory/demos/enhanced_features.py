@@ -67,7 +67,7 @@ def main():
     print("-" * 50)
     print("1. 🌐 Open: http://localhost:8501")
     print("2. 📂 Load demo data using 'Import sessions from CSV'")
-    print("3. 📁 Upload: data/demo_dataset.csv (30 sessions career journey)")
+    print("3. 📁 Upload: data/ultimate_demo_dataset.csv (30 sessions career journey)")
     print("4. 🎯 Explore new tabs:")
     print("   • '🎬 Animated Evolution' - All new animated features")
     print("   • '📊 Enhanced Ridgeline Plot' - Improved readability")
