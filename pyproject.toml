@@ -3,12 +3,12 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "semantic-tensor-memory"
+name = "semantic-tensor-analysis"
 version = "0.1.0"
-description = "Universal Multimodal Semantic Tensor Memory toolkit."
+description = "Temporal semantic evolution analysis framework for tracking meaning across time, tokens, and context."
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "Semantic Tensor Memory Contributors" }]
+authors = [{ name = "Semantic Tensor Analysis Contributors" }]
 dependencies = [
     "torch>=2.2,<2.5",
     "transformers==4.*",
@@ -28,11 +28,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/semantic-tensor-memory"
+Homepage = "https://github.com/semantic-tensor-analysis"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["semantic_tensor_memory*"]
+include = ["semantic_tensor_analysis*"]
 
 [tool.setuptools.package-data]
-"semantic_tensor_memory" = []
+"semantic_tensor_analysis" = []

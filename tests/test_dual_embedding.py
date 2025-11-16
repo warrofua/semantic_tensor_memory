@@ -1,7 +1,7 @@
 import torch
 import pytest
 
-from semantic_tensor_memory.memory.sequence_drift import (
+from semantic_tensor_analysis.memory.sequence_drift import (
     sequence_drift,
     semantic_coherence_score,
 )

@@ -8,10 +8,10 @@ while preserving STM's core concepts and enabling cross-modal analysis.
 
 import torch
 import time
-from semantic_tensor_memory.memory.universal_core import (
+from semantic_tensor_analysis.memory.universal_core import (
     UniversalMemoryStore, Modality, create_universal_embedder, EventDescriptor, UniversalEmbedding
 )
-from semantic_tensor_memory.memory.text_embedder import TextEmbedder, create_text_embedding
+from semantic_tensor_analysis.memory.text_embedder import TextEmbedder, create_text_embedding
 
 def test_universal_text_embedding():
     """Test text modality in universal framework."""
@@ -143,7 +143,7 @@ def test_vision_modality():
     print("=" * 50)
     
     try:
-        from semantic_tensor_memory.memory.vision_embedder import VisionEmbedder, CLIP_AVAILABLE
+        from semantic_tensor_analysis.memory.vision_embedder import VisionEmbedder, CLIP_AVAILABLE
         
         if not CLIP_AVAILABLE:
             print("⚠️  CLIP not available - skipping vision tests")
@@ -265,8 +265,8 @@ def test_backward_compatibility():
     print("\n\n🔄 BACKWARD COMPATIBILITY TEST")
     print("=" * 50)
     
-    from semantic_tensor_memory.memory.universal_core import embed_text
-    from semantic_tensor_memory.memory.text_embedder import embed_sentence, get_token_count
+    from semantic_tensor_analysis.memory.universal_core import embed_text
+    from semantic_tensor_analysis.memory.text_embedder import embed_sentence, get_token_count
     
     test_text = "This is a test sentence for backward compatibility."
     

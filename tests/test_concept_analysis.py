@@ -12,20 +12,20 @@ try:
     import numpy as np
 except ImportError:  # pragma: no cover - handled via pytest skip
     np = None
-from semantic_tensor_memory.memory.universal_core import (
+from semantic_tensor_analysis.memory.universal_core import (
     UniversalMemoryStore,
     UniversalEmbedding,
     Modality,
 )
-from semantic_tensor_memory.memory.text_embedder import TextEmbedder
-from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer, analyze_existing_store_concepts
+from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+from semantic_tensor_analysis.analytics.concept.concept_analysis import ConceptAnalyzer, analyze_existing_store_concepts
 
 def test_concept_analysis():
     """Test the enhanced concept analysis pipeline."""
     if np is None:
         pytest.skip("numpy is required for concept analysis test")
 
-    from semantic_tensor_memory.visualization.tools.concept_visualizer import (
+    from semantic_tensor_analysis.visualization.tools.concept_visualizer import (
         visualize_concept_evolution,
     )
 
@@ -159,7 +159,7 @@ def test_similarity_matrix():
     """Test the concept similarity matrix functionality."""
     print("\n🔗 Testing concept similarity matrix...")
     
-    from semantic_tensor_memory.analytics.concept.concept_analysis import (
+    from semantic_tensor_analysis.analytics.concept.concept_analysis import (
         get_concept_similarity_matrix,
     )
     

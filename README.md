@@ -1,6 +1,71 @@
-# Semantic Tensor Memory
+# Semantic Tensor Analysis
 
-A structured, interpretable memory system for tracking meaning across time, tokens, and context. This implementation provides a working prototype of the Semantic Tensor Memory (STM) system described in the accompanying paper/TeX write-up.
+A **temporal semantic evolution analysis framework** for tracking how meaning changes across time, tokens, and context. STA provides ready-made analysis workflows, drift metrics, and specialized visualizations for understanding semantic trajectories through sessions of text.
+
+## What is STA?
+
+**Semantic Tensor Analysis** is a toolkit for analyzing how meaning evolves across temporal sequences:
+
+- ✅ **Analysis framework** for temporal semantic evolution
+- ✅ **Visualization toolkit** for meaning drift across sessions
+- ✅ **Research platform** for studying how concepts evolve over time
+- ✅ **Domain-specific workflows** for clinical progress tracking, learning journeys, conversation analysis, and research note evolution
+
+### Core Innovation: Dual-Resolution Temporal Analysis
+
+STA tracks semantic meaning at two resolutions simultaneously:
+- **Token-level granularity** (via BERT tokenization) - track individual concept drift
+- **Sequence-level semantics** (via Sentence-BERT) - track holistic meaning evolution
+
+This enables both fine-grained token alignment analysis and high-level semantic trajectory computation.
+
+---
+
+## 💡 Concrete Example: What Can STA Tell You?
+
+**Scenario: ABA Therapy Progress Tracking**
+
+You have 30 therapy session notes for a patient over 6 months:
+
+```python
+# Load sessions
+store = UniversalMemoryStore()
+for note in therapy_notes:
+    store.add_session(note)
+
+# Run analysis
+```
+
+**STA automatically reveals:**
+
+1. **Semantic Trajectory** (`evolution_tab`)
+   - "Patient meaning shifted from cluster 'behavioral challenges' (weeks 1-8) to 'skill acquisition' (weeks 9-20) to 'generalization' (weeks 21-30)"
+   - Velocity graph shows rapid progress in weeks 12-15, plateau in weeks 22-26
+
+2. **Token-Level Drift** (`token_alignment_heatmap`)
+   - Words that appeared/disappeared: "tantrum" (high early, faded), "independence" (emerged week 10), "peer interaction" (emerged week 18)
+   - Optimal alignment shows which specific concepts persisted vs. transformed
+
+3. **Concept Evolution** (`concepts_tab`)
+   - KMeans identifies 4 semantic clusters: "regulation struggles", "skill building", "social engagement", "mastery"
+   - Transition graph shows patient moved through clusters sequentially with brief regression in week 23
+
+4. **Inflection Points** (`trajectory_computation`)
+   - Week 12: Acceleration spike (breakthrough moment)
+   - Week 23: Temporary deceleration (regression or plateau)
+   - Week 28: Final acceleration (consolidation phase)
+
+5. **PCA Narrative** (`dimensionality_tab` + LLM)
+   - "PC1 (43% variance) represents 'independence vs. support needs'"
+   - "PC2 (28% variance) represents 'emotional regulation vs. dysregulation'"
+   - "Patient trajectory: moved positively along PC1 while PC2 oscillated, then stabilized"
+
+6. **Domain-Aware Insights** (`AI_insights_tab`)
+   - "Based on 6-month span, this represents a typical ABA intensive phase"
+   - "The regression in week 23 aligns with expected variance in skill acquisition"
+   - "Recommend: Continue current approach, monitor for sustained generalization"
+
+**All of this from just uploading a CSV.** No custom code, no manual analysis.
 
 ---
 
@@ -36,21 +101,21 @@ A structured, interpretable memory system for tracking meaning across time, toke
 ## 🗂️ Project Structure
 
 - `app.py`: Streamlit web application (tabs: Overview, Evolution, Patterns, Dimensionality, Concepts, Explain, AI Insights)
-- `src/semantic_tensor_memory/streamlit/utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
-- `src/semantic_tensor_memory/streamlit/plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
-- `src/semantic_tensor_memory/chat/analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
-- `src/semantic_tensor_memory/memory/`: Core memory implementation
-  - `universal_core.py`: Universal STM types and `UniversalMemoryStore` (dynamic dims, ragged sequences)
+- `src/semantic_tensor_analysis/streamlit/utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
+- `src/semantic_tensor_analysis/streamlit/plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
+- `src/semantic_tensor_analysis/chat/analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
+- `src/semantic_tensor_analysis/memory/`: Core memory implementation
+  - `universal_core.py`: Universal STA types and `UniversalMemoryStore` (dynamic dims, ragged sequences)
   - `text_embedder.py`: Dual-resolution text embeddings (token-level BERT + sentence-level S-BERT)
   - `embedder.py` / `embedder_sbert.py` / `embedder_hybrid.py`: Embedding backends
   - `drift.py` / `sequence_drift.py`: Drift metrics, token alignment (Hungarian), token-importance drift
   - `store.py`: Storage utilities
-- `src/semantic_tensor_memory/analytics/tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
-- `src/semantic_tensor_memory/visualization/viz/`: Visualization tools
+- `src/semantic_tensor_analysis/analytics/tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
+- `src/semantic_tensor_analysis/visualization/viz/`: Visualization tools
   - `heatmap.py`: Similarity heatmaps, token alignment heatmap (returns Matplotlib Figure)
   - `pca_plot.py`, `pca_summary.py`, `semantic_analysis.py`, `holistic_semantic_analysis.py`
-- `src/semantic_tensor_memory/visualization/tools/`: Additional concept visualizers
-- `src/semantic_tensor_memory/demos/`: CLI demos and dataset helpers
+- `src/semantic_tensor_analysis/visualization/tools/`: Additional concept visualizers
+- `src/semantic_tensor_analysis/demos/`: CLI demos and dataset helpers
 - `ultimate_demo_dataset.csv`: Rich demo dataset
 - `aba_therapy_dataset.csv`: ABA therapy dataset (and extended version for same client)
 - `archive/`: Historical docs (safe to remove if not needed)
@@ -58,19 +123,73 @@ A structured, interpretable memory system for tracking meaning across time, toke
 
 ---
 
-## ✨ Features
+## ✨ Features: What Makes STA Unique
 
-- Dual-resolution embeddings (token-level BERT + sentence-level S-BERT)
-- Ragged tensors with padding and masks for batch ops (`tensor_batching.py`)
-- Mask-aware PCA pipeline with diagnostics; token or session-mean granularity
-- Token alignment heatmaps (Hungarian alignment) and token-importance drift
-- Temporal drift visuals: PCA trajectories, similarity heatmaps, temporal heatmaps
-- Concept analysis: clustering, evolution, exemplar alignment in clusters
-- Dimensionality tab with LLM Axis Explainer
-- Explain tab with AI explanations (`what_it_means`, `why_these_results`, `what_to_do_next`)
-- AI Insights: domain-aware prompt that infers appropriate time scale (days/weeks/months/quarters) from dataset span
-- Streamlit UX: first-load expanded sidebar, minimized after upload; inline Matplotlib (no blocking windows)
-- Datasets: `ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`
+### 🎯 Temporal Semantic Analysis
+
+**1. Ragged Tensor Operations for Variable-Length Sessions**
+- Handle sessions with 100-500 tokens each using masked batch operations
+- `pad_and_stack()`: Convert variable-length sequences to padded tensors with masks
+- `masked_session_means()`: Compute statistics ignoring padding
+- Critical for session-level analysis while preserving token-level detail
+
+**2. Token-Level Drift Analysis via Optimal Alignment**
+- Hungarian algorithm for optimal token-to-token matching across sessions
+- Identify which specific concepts/words changed between sessions
+- `token_importance_drift()`: Quantify which tokens drifted most
+- Token alignment heatmaps showing cross-session concept mapping
+
+**3. Semantic Trajectory Computation**
+- **Velocity**: Rate of meaning change between consecutive sessions
+- **Acceleration**: When semantic change accelerated or decelerated
+- **Inflection point detection**: Identify when meaning shifted rapidly
+- 3D trajectory visualization through semantic space over time
+
+**4. Global Temporal Operations**
+- **PCA across all sessions**: Define semantic axes based on complete dataset
+- **Concept clustering**: Group sessions by semantic similarity (KMeans)
+- **Cluster transition tracking**: When did meaning move from theme A to theme B?
+- **Temporal patterns**: Identify cycles, trends, and evolution patterns
+
+### 📊 Specialized Visualizations (~40% of Codebase)
+
+- **Semantic Drift River**: 3D "river" visualization of meaning flow over time
+- **PCA Timeline Animations**: Watch semantic position evolve across sessions
+- **Temporal Heatmaps**: Session-to-session similarity matrices
+- **Token Alignment Plots**: Visualize optimal token matching
+- **Concept Evolution Graphs**: How themes emerged, peaked, and faded
+- **Ridgeline Plots**: Distribution evolution across time
+- **Liminal Tunnel Visualization**: Immersive drift tunnel
+- **4D Semantic Space**: Multi-dimensional semantic trajectories
+
+### 🧠 Domain-Adaptive AI Analysis
+
+- **Dual-resolution embeddings**: Token-level (BERT) + sentence-level (S-BERT) simultaneously
+- **Domain inference**: Automatically detect ABA therapy, clinical notes, learning journeys, research
+- **Time-scale awareness**: Adaptive analysis for daily, weekly, monthly, or quarterly patterns
+- **LLM-powered insights**: Via Ollama integration for semantic narrative generation
+- **Axis interpretation**: Explain what PCA dimensions mean in domain-specific terms
+
+### 🛠️ Ready-Made Analysis Workflows
+
+- **Clinical Progress Tracking**: ABA therapy, patient notes, treatment evolution
+- **Learning Journey Mapping**: How understanding evolves through course materials
+- **Research Evolution**: Track how hypotheses and questions change over time
+- **Conversation Analysis**: Understand topic drift in dialogue
+- **Content Versioning**: Analyze how writing/ideas change across drafts
+
+### 📦 Production-Ready Features
+
+- Multi-format data ingestion (CSV, JSON, TXT)
+- Persistent storage with CPU/GPU portability
+- Session state management for interactive exploration
+- Performance optimization with adaptive processing
+- Comprehensive test suite (6 test modules, 13k+ lines)
+- Streamlit web UI with 7 analysis tabs
+- CLI demo for rapid iteration
+
+---
+
 ## 📦 Datasets
 
 - `ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
@@ -113,13 +232,13 @@ This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF)
 ### Overview
 
 - The paper/TeX describes the motivation, architecture, algorithms, applications, and limitations of STM.
-- The codebase implements STM with ragged tensor handling, dual-resolution embeddings, token alignment, and domain-aware LLM interpretation.
+- The codebase implements STA with ragged tensor handling, dual-resolution embeddings, token alignment, and domain-aware LLM interpretation.
 
 ### Feature Correspondence Table
 
 | Area                | Paper Coverage | Codebase Coverage | Notes                                                      |
 |---------------------|----------------|-------------------|------------------------------------------------------------|
-| STM Architecture    | Yes            | Yes               | Aligned; dynamic dims and ragged sequences implemented.    |
+| STA Architecture    | Yes            | Yes               | Aligned; dynamic dims and ragged sequences implemented.    |
 | Data Import         | Yes            | Yes               | CSV upload in Streamlit; CLI import with tkinter.          |
 | Visualization       | Yes            | Yes               | PCA, heatmaps, token alignment, token trajectories.        |
 | LLM Integration     | Yes            | Yes               | Axis Explainer; domain-aware insights with time scale.     |
@@ -137,13 +256,174 @@ This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF)
 
 ---
 
-## 🧩 How tensors flow (ragged → padded + mask)
+## 🧩 Technical Architecture: Why Sessions, Not Individual Vectors?
 
-- Token embeddings are variable-length per session (ragged).
-- `tensor_batching.pad_and_stack` pads to `max_tokens` and returns `(batch, mask)`.
-- Downstream ops (PCA, heatmaps) use masks to ignore padding:
-  - `masked_session_means(batch, mask)` for session granularity
-  - `flatten_with_mask(batch, mask)` for token granularity with `(session_ids, token_ids)`
+### The Session-Based Approach
+
+STA operates on **sessions** (temporal snapshots containing variable-length sequences), not individual vectors:
+
+```python
+# A session is a variable-length sequence
+session = UniversalEmbedding(
+    event_embeddings=[token_1_emb, token_2_emb, ..., token_n_emb],  # n varies per session
+    sequence_embedding=session_mean,  # Holistic meaning
+    events=[EventDescriptor(...), ...]  # Token metadata
+)
+
+# Sessions vary in length:
+session_1: [100 tokens × 768 dims]
+session_2: [237 tokens × 768 dims]
+session_3: [89 tokens × 768 dims]
+```
+
+This enables **dual-resolution analysis**: zoom into token-level details or analyze session-level trends.
+
+### Ragged Tensor Operations with Masking
+
+The key innovation for handling variable-length sessions:
+
+```python
+from semantic_tensor_analysis.analytics.tensor_batching import (
+    pad_and_stack,
+    masked_session_means,
+    flatten_with_mask
+)
+
+# Convert ragged sequences to batched tensor
+sessions_tensor, mask = pad_and_stack(sessions)
+# Shape: [3, 237, 768]  (padded to max length = 237)
+# Mask: [3, 237] boolean  (False = padding, ignore in computation)
+
+# Compute session-level statistics (ignoring padding)
+session_means = masked_session_means(sessions_tensor, mask)
+# Shape: [3, 768] - one mean per session
+
+# Flatten to token level with provenance tracking
+flat_tokens, session_ids, token_ids = flatten_with_mask(sessions_tensor, mask)
+# flat_tokens: [426, 768]  (100 + 237 + 89 tokens total)
+# session_ids: [426]  (which session each token came from)
+# token_ids: [426]  (position within session)
+```
+
+**Why this matters:**
+- Padding doesn't corrupt statistics (masked operations)
+- Can analyze at session OR token granularity seamlessly
+- Enables optimal token alignment across sessions (Hungarian algorithm)
+- PCA can operate on all tokens while preserving session boundaries
+
+### Flow: Raw Data → Analysis → Visualization
+
+```
+CSV/JSON/TXT
+    ↓
+Text Embedding (dual-resolution)
+    ├→ Token embeddings [n_tokens, 768] via BERT
+    └→ Sequence embedding [768] via Sentence-BERT
+    ↓
+Session Creation (UniversalEmbedding)
+    ↓
+Storage (UniversalMemoryStore)
+    ↓
+Ragged Tensor Batching (pad_and_stack)
+    ↓
+Global Analysis
+    ├→ PCA across all sessions/tokens
+    ├→ Concept clustering (KMeans)
+    ├→ Token alignment (Hungarian)
+    └→ Drift computation (cosine distance)
+    ↓
+Visualization
+    ├→ Temporal trajectories (velocity, acceleration)
+    ├→ Heatmaps (session similarity, token alignment)
+    ├→ 3D semantic space (PCA projection)
+    └→ Concept evolution graphs
+    ↓
+Optional: LLM narrative generation (Ollama)
+```
+
+**The key insight:** Operations are **across sessions** (temporal), not **within a database** (spatial).
+
+---
+
+## 🤔 FAQ: Why Not Just Use...?
+
+### "Why not just use a Jupyter notebook with sklearn?"
+
+**You can!** STA essentially packages what you'd build in a research notebook into a reusable framework:
+
+**Without STA:**
+```python
+# You'd need to implement:
+- Dual BERT + S-BERT embedding pipeline
+- Ragged tensor padding and masking logic
+- Hungarian algorithm for token alignment
+- Drift velocity/acceleration computation
+- 10+ specialized visualization functions
+- Domain-adaptive prompts for LLM analysis
+- Streamlit UI for interactive exploration
+```
+
+**With STA:**
+```python
+# Just load your data
+store = UniversalMemoryStore()
+for session in sessions:
+    store.add_session(session)
+
+# Everything else is ready to use
+```
+
+**STA saves you from re-implementing this infrastructure for every temporal semantic analysis project.**
+
+### "Why not use LangSmith or W&B for tracking?"
+
+**Great tools, different purposes:**
+
+| Feature | LangSmith | W&B | STA |
+|---------|-----------|-----|-----|
+| **Conversation tracking** | ✅ Excellent | ❌ | ✅ |
+| **Metric dashboards** | ✅ | ✅ Excellent | ✅ |
+| **Semantic drift analysis** | ❌ | ❌ | ✅ Token + session level |
+| **Token alignment** | ❌ | ❌ | ✅ Hungarian algorithm |
+| **Trajectory computation** | ❌ | ❌ | ✅ Velocity, acceleration |
+| **Domain-specific workflows** | ❌ | ❌ | ✅ Clinical, learning, research |
+
+**Use LangSmith/W&B for production monitoring. Use STA for deep temporal semantic analysis.**
+
+### "Why not just compute cosine similarity between embeddings?"
+
+Simple similarity misses **temporal patterns**:
+
+```python
+# Simple approach: pairwise similarity
+similarity(session_1, session_2)  # → 0.87
+similarity(session_2, session_3)  # → 0.82
+
+# STA approach: temporal dynamics
+velocity = compute_drift_velocity([session_1, session_2, session_3])
+# → [0.13, 0.18]  (change is accelerating)
+
+inflection_points = detect_rapid_shifts(velocity)
+# → [session_5, session_12]  (when meaning changed rapidly)
+
+token_drift = token_importance_drift(session_1, session_3)
+# → ["anxiety": high drift, "coping": low drift]  (which concepts changed)
+```
+
+**STA provides the calculus of semantic change, not just static snapshots.**
+
+### "Why session-based instead of continuous streaming?"
+
+**Session-based is intentional** for certain domains:
+
+- **Clinical notes**: Each therapy session is a natural boundary
+- **Learning journeys**: Each lesson/assignment is discrete
+- **Research evolution**: Each draft/experiment is a snapshot
+- **Meeting summaries**: Each meeting is a unit of analysis
+
+**Future work**: STA could support streaming by defining windows, but sessions align with how many domains naturally structure temporal data.
+
+---
 
 ## 🔗 Token alignment & drift
 

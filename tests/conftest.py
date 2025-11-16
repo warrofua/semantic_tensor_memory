@@ -1,4 +1,4 @@
-"""Test configuration for the Semantic Tensor Memory package."""
+"""Test configuration for the Semantic Tensor Analysis package."""
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -365,8 +365,8 @@ if "torch" not in sys.modules:
 import torch
 
 # Stub drift module with deterministic implementations
-if "semantic_tensor_memory.memory.drift" not in sys.modules:
-    drift_module = ModuleType("semantic_tensor_memory.memory.drift")
+if "semantic_tensor_analysis.memory.drift" not in sys.modules:
+    drift_module = ModuleType("semantic_tensor_analysis.memory.drift")
 
     def cosine(a: torch.Tensor, b: torch.Tensor) -> float:
         vec_a = _flatten(a.tolist())
@@ -395,11 +395,11 @@ if "semantic_tensor_memory.memory.drift" not in sys.modules:
     drift_module.session_mean = session_mean
     drift_module.drift_series = drift_series
     drift_module.token_drift = token_drift
-    sys.modules["semantic_tensor_memory.memory.drift"] = drift_module
+    sys.modules["semantic_tensor_analysis.memory.drift"] = drift_module
 
 # Stub sequence_drift module
-if "semantic_tensor_memory.memory.sequence_drift" not in sys.modules:
-    seq_module = ModuleType("semantic_tensor_memory.memory.sequence_drift")
+if "semantic_tensor_analysis.memory.sequence_drift" not in sys.modules:
+    seq_module = ModuleType("semantic_tensor_analysis.memory.sequence_drift")
 
     def sequence_drift(tensors, max_length=32):
         scores = []
@@ -442,7 +442,7 @@ if "semantic_tensor_memory.memory.sequence_drift" not in sys.modules:
     seq_module.semantic_coherence_score = semantic_coherence_score
     seq_module.token_importance_drift = token_importance_drift
     seq_module.enhanced_drift_analysis = enhanced_drift_analysis
-    sys.modules["semantic_tensor_memory.memory.sequence_drift"] = seq_module
+    sys.modules["semantic_tensor_analysis.memory.sequence_drift"] = seq_module
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -500,9 +500,9 @@ def stub_embeddings(monkeypatch):
         _DummySentenceModel,
     )
 
-    embedder = importlib.import_module("semantic_tensor_memory.memory.embedder")
-    dual_embedder = importlib.import_module("semantic_tensor_memory.memory.dual_embedder")
-    embedder_config = importlib.import_module("semantic_tensor_memory.memory.embedder_config")
+    embedder = importlib.import_module("semantic_tensor_analysis.memory.embedder")
+    dual_embedder = importlib.import_module("semantic_tensor_analysis.memory.dual_embedder")
+    embedder_config = importlib.import_module("semantic_tensor_analysis.memory.embedder_config")
 
     importlib.reload(embedder)
     importlib.reload(dual_embedder)
@@ -738,8 +738,8 @@ if "sentence_transformers" not in sys.modules:
     torch_stub.inference_mode = _inference_mode
 
 # Minimal stub for the storage module to avoid optional dependencies
-if "semantic_tensor_memory.memory.store" not in sys.modules:
-    store_stub = ModuleType("semantic_tensor_memory.memory.store")
+if "semantic_tensor_analysis.memory.store" not in sys.modules:
+    store_stub = ModuleType("semantic_tensor_analysis.memory.store")
 
     def _noop(*args, **kwargs):
         return None
@@ -752,4 +752,4 @@ if "semantic_tensor_memory.memory.store" not in sys.modules:
     store_stub.append = _noop
     store_stub.to_batch = lambda *args, **kwargs: []
     store_stub.flatten = lambda *args, **kwargs: []
-    sys.modules["semantic_tensor_memory.memory.store"] = store_stub
+    sys.modules["semantic_tensor_analysis.memory.store"] = store_stub

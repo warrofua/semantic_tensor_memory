@@ -53,7 +53,7 @@ except Exception:
     pass
 
 # Import Universal Multimodal STM modules
-from semantic_tensor_memory import (
+from semantic_tensor_analysis import (
     UniversalMemoryStore,
     Modality,
     create_universal_embedder,
@@ -62,11 +62,11 @@ from semantic_tensor_memory import (
     create_text_embedding,
     embed_sentence,
 )
-from semantic_tensor_memory.memory.store import save, append  # Keep legacy store for compatibility
-from semantic_tensor_memory.memory.drift import drift_series  # Keep legacy drift analysis
+from semantic_tensor_analysis.memory.store import save, append  # Keep legacy store for compatibility
+from semantic_tensor_analysis.memory.drift import drift_series  # Keep legacy drift analysis
 
 # Import visualization modules
-from semantic_tensor_memory.streamlit import (
+from semantic_tensor_analysis.streamlit import (
     initialize_session_state,
     robust_pca_pipeline,
     plot_drift_plotly,
@@ -82,38 +82,38 @@ from semantic_tensor_memory.streamlit import (
     create_4d_semantic_space_visualization,
     create_liminal_tunnel_visualization,
 )
-from semantic_tensor_memory.visualization import (
+from semantic_tensor_analysis.visualization import (
     render_semantic_drift_river_analysis,
     render_holistic_semantic_analysis,
     token_alignment_heatmap,
     generate_narrative_summary,
 )
-from semantic_tensor_memory.visualization.tools.concept_visualizer import (
+from semantic_tensor_analysis.visualization.tools.concept_visualizer import (
     visualize_concept_evolution,
 )
-from semantic_tensor_memory.chat.analysis import render_comprehensive_chat_analysis
+from semantic_tensor_analysis.chat.analysis import render_comprehensive_chat_analysis
 # Chat history analysis (unified with main processing)
-from semantic_tensor_memory.chat.history_analyzer import ChatHistoryParser
+from semantic_tensor_analysis.chat.history_analyzer import ChatHistoryParser
 
-from semantic_tensor_memory.analytics.trajectory import (
+from semantic_tensor_analysis.analytics.trajectory import (
     calculate_semantic_trajectory_data,
     create_3d_trajectory_plot,
     display_trajectory_analysis_table,
 )
-from semantic_tensor_memory.analytics.dimensionality import (
+from semantic_tensor_analysis.analytics.dimensionality import (
     compare_dimensionality_methods,
     create_alternative_visualization,
 )
 
 # Add performance optimizer import at the top
-from semantic_tensor_memory.optimization import (
+from semantic_tensor_analysis.optimization import (
     AdaptiveDataProcessor,
     ProgressiveAnalyzer,
     create_performance_dashboard,
     DatasetProfile,
     PerformanceMetrics,
 )
-from semantic_tensor_memory.explainability import (
+from semantic_tensor_analysis.explainability import (
     ExplainabilityEngine,
     create_explanation_dashboard,
 )
@@ -327,7 +327,7 @@ def handle_unified_upload(uploaded_file):
                 file_content = uploaded_file.read().decode('utf-8')
                 
                 # Parse messages using existing chat parser
-                from semantic_tensor_memory.chat.history_analyzer import ChatHistoryParser
+                from semantic_tensor_analysis.chat.history_analyzer import ChatHistoryParser
                 messages = ChatHistoryParser.auto_detect_format(file_content)
                 
                 if not messages:
@@ -854,9 +854,9 @@ def render_overview_dashboard():
         with st.spinner("🧠 Analyzing your semantic patterns..."):
             try:
                 # Quick concept analysis with fewer clusters for overview
-                from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer
-                from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
-                from semantic_tensor_memory.memory.text_embedder import TextEmbedder
+                from semantic_tensor_analysis.analytics.concept.concept_analysis import ConceptAnalyzer
+                from semantic_tensor_analysis.memory.universal_core import UniversalMemoryStore
+                from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
                 
                 # PERFORMANCE FIX: Use cached models for quick analysis
                 if 'quick_analysis_store' not in st.session_state:
@@ -1083,7 +1083,7 @@ def render_semantic_evolution_tab():
                         st.error(f"Token alignment failed: {e}")
 
         # Token importance drift and coherence trends
-        from semantic_tensor_memory.memory.sequence_drift import (
+        from semantic_tensor_analysis.memory.sequence_drift import (
             token_importance_drift,
             semantic_coherence_score,
         )
@@ -1207,7 +1207,7 @@ def render_pattern_analysis_tab():
                         # Axis explainer (LLM)
                         with st.expander("🧠 Axis Explainer (LLM)"):
                             try:
-                                from semantic_tensor_memory.visualization.viz.semantic_analysis import (
+                                from semantic_tensor_analysis.visualization.viz.semantic_analysis import (
                                     analyze_pca_patterns,
                                 )
                                 # Build texts/scores for PC1 extremes
@@ -1771,11 +1771,11 @@ def render_enhanced_concept_analysis_tab():
         with st.spinner("🧠 Analyzing concept evolution using S-BERT embeddings..."):
             try:
                 # Import enhanced concept analysis helpers
-                from semantic_tensor_memory.analytics.concept.concept_analysis import ConceptAnalyzer
+                from semantic_tensor_analysis.analytics.concept.concept_analysis import ConceptAnalyzer
                 
                 # Create Universal STM store from existing memory
-                from semantic_tensor_memory.memory.universal_core import UniversalMemoryStore
-                from semantic_tensor_memory.memory.text_embedder import TextEmbedder
+                from semantic_tensor_analysis.memory.universal_core import UniversalMemoryStore
+                from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
                 
                 # Convert existing memory to Universal STM format
                 universal_store = UniversalMemoryStore()

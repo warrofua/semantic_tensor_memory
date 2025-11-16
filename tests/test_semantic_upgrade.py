@@ -1,7 +1,7 @@
 import torch
 import pytest
 
-from semantic_tensor_memory.memory.drift import drift_series
+from semantic_tensor_analysis.memory.drift import drift_series
 
 
 def test_embed_sentence_similarity_matches_expected(stub_embeddings):

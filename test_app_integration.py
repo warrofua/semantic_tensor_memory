@@ -1,7 +1,7 @@
 """Smoke tests for the modular Streamlit application package."""
 
-from semantic_tensor_memory.app import build_app
-from semantic_tensor_memory.app.services import compute_drift_series, parse_chat_history
+from semantic_tensor_analysis.app import build_app
+from semantic_tensor_analysis.app.services import compute_drift_series, parse_chat_history
 
 import pytest
 
