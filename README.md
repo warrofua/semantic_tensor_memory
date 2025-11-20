@@ -98,26 +98,19 @@ for note in therapy_notes:
 
 ## 🗂️ Project Structure
 
-- `app.py`: Streamlit web application (tabs: Overview, Evolution, Patterns, Dimensionality, Concepts, Explain, AI Insights)
-- `src/semantic_tensor_analysis/streamlit/utils.py`: Data loading, PCA pipeline (mask-aware), session state and prompt helpers
-- `src/semantic_tensor_analysis/streamlit/plots.py`: Streamlit-specific plotting helpers (Plotly/Altair/inline Matplotlib)
-- `src/semantic_tensor_analysis/chat/analysis.py`: LLM prompts and analysis (Ollama), domain-aware insights with time-scale inference
-- `src/semantic_tensor_analysis/memory/`: Core memory implementation
-  - `universal_core.py`: Universal STA types and `UniversalMemoryStore` (dynamic dims, ragged sequences)
-  - `text_embedder.py`: Dual-resolution text embeddings (token-level BERT + sentence-level S-BERT)
-  - `embedder.py` / `embedder_sbert.py` / `embedder_hybrid.py`: Embedding backends
-  - `drift.py` / `sequence_drift.py`: Drift metrics, token alignment (Hungarian), token-importance drift
-  - `store.py`: Storage utilities
-- `src/semantic_tensor_analysis/analytics/tensor_batching.py`: Ragged tensor batching utilities (`pad_and_stack`, `masked_session_means`, `flatten_with_mask`)
-- `src/semantic_tensor_analysis/visualization/viz/`: Visualization tools
-  - `heatmap.py`: Similarity heatmaps, token alignment heatmap (returns Matplotlib Figure)
-  - `pca_plot.py`, `pca_summary.py`, `semantic_analysis.py`, `holistic_semantic_analysis.py`
-- `src/semantic_tensor_analysis/visualization/tools/`: Additional concept visualizers
-- `src/semantic_tensor_analysis/demos/`: CLI demos and dataset helpers
-- `ultimate_demo_dataset.csv`: Rich demo dataset
-- `aba_therapy_dataset.csv`: ABA therapy dataset (and extended version for same client)
-- `archive/`: Historical docs (safe to remove if not needed)
-- `pyproject.toml`: Python package metadata and dependencies
+- `app.py`: Streamlit web app (tabs: Overview, Evolution, Patterns, Dimensionality, Concepts, Explain, AI Insights); wires sidebar chat and loaders.
+- `src/semantic_tensor_analysis/app/`: App modules (`main.py`, `tabs/`, `sidebar.py`, `sidebar_chat.py`, `temporal_visualizations.py`, assets/config).
+- `src/semantic_tensor_analysis/memory/`: Core STM types (`universal_core.py`), text embedder (`text_embedder.py`), drift (`drift.py`, `sequence_drift.py`), storage (`store.py`), legacy shim modules that forward to `archive/legacy_embedders/` when explicitly enabled.
+- `src/semantic_tensor_analysis/storage/`: Storage manager/stats/cleanup utilities (`manager.py`).
+- `src/semantic_tensor_analysis/streamlit/`: Streamlit helpers (`utils.py`, `plots.py`) used across tabs.
+- `src/semantic_tensor_analysis/analytics/`: Tensor batching, dimensionality, trajectories, and concept analytics.
+- `src/semantic_tensor_analysis/visualization/`: Plotting backends (`viz/`, `tools/`, Streamlit-facing `plots.py`).
+- `src/semantic_tensor_analysis/chat/`: LLM integration (`llama_cpp_analyzer.py`, `unified_analyzer.py`, insights in `analysis.py`, history parsing).
+- `src/semantic_tensor_analysis/demos/`: CLI demos.
+- `archive/legacy_embedders/`: Archived embedders kept for compatibility only.
+- `data/`: Demo CSVs (`ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`).
+- `tests/`: Test suite.
+- `pyproject.toml`: Package metadata/dependencies.
 
 ---
 
