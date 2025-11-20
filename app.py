@@ -68,10 +68,10 @@ from semantic_tensor_analysis import (
     Modality,
     create_universal_embedder,
     embed_text,
-    TextEmbedder,
     create_text_embedding,
     embed_sentence,
 )
+from semantic_tensor_analysis.memory import get_text_embedder
 from semantic_tensor_analysis.memory.store import save, append  # Keep legacy store for compatibility
 from semantic_tensor_analysis.memory.drift import drift_series  # Keep legacy drift analysis
 
@@ -182,7 +182,7 @@ def collapse_sidebar_once_after_load():
 def get_cached_text_embedder():
     """Get cached TextEmbedder to prevent reloading 1GB models for every CSV import."""
     st.info("🔄 Loading embedding models (this happens once per session)...")
-    embedder = TextEmbedder()
+    embedder = get_text_embedder()
     st.success("✅ Models loaded and cached!")
     return embedder
 
@@ -962,7 +962,6 @@ def render_overview_dashboard():
                 # Quick concept analysis with fewer clusters for overview
                 from semantic_tensor_analysis.analytics.concept.concept_analysis import ConceptAnalyzer
                 from semantic_tensor_analysis.memory.universal_core import UniversalMemoryStore
-                from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
                 
                 # PERFORMANCE FIX: Use cached models for quick analysis
                 if 'quick_analysis_store' not in st.session_state:
@@ -1887,11 +1886,10 @@ def render_enhanced_concept_analysis_tab():
                 
                 # Create Universal STM store from existing memory
                 from semantic_tensor_analysis.memory.universal_core import UniversalMemoryStore
-                from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
                 
-                # Convert existing memory to Universal STM format
+                # Convert existing memory to Universal STM format using shared embedder
                 universal_store = UniversalMemoryStore()
-                text_embedder = TextEmbedder()
+                text_embedder = get_cached_text_embedder()
                 
                 # Filter sessions based on scope
                 memory_data = st.session_state.memory

@@ -21,7 +21,7 @@ def calculate_semantic_trajectory_data(memory, meta):
     session_metadata = []
     
     for idx, tensor in enumerate(memory):
-        session_emb = tensor.mean(0).numpy()  # Mean embedding for the session
+        session_emb = tensor.mean(0).detach().cpu().numpy()  # Mean embedding for the session
         session_embeddings.append(session_emb)
         session_text = meta[idx].get('text', f'Session {idx+1}')
         session_metadata.append({

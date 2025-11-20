@@ -84,7 +84,11 @@ def prepare_for_pca(tensors: Sequence[torch.Tensor]) -> Tuple[np.ndarray, np.nda
         print("[red]Error:[/red] Still found NaN/Inf values after normalization")
         flat = torch.nan_to_num(flat, nan=0.0, posinf=0.0, neginf=0.0)
 
-    return flat.numpy(), session_ids, token_ids
+    return (
+        flat.detach().cpu().numpy(),
+        session_ids.detach().cpu().numpy(),
+        token_ids.detach().cpu().numpy(),
+    )
 
 
 def interpret_pca(

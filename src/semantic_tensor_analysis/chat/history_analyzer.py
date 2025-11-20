@@ -13,8 +13,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 
+from semantic_tensor_analysis.memory import get_text_embedder
 from semantic_tensor_analysis.memory.universal_core import UniversalMemoryStore, Modality
-from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
 
 @dataclass
 class ChatMessage:
@@ -192,7 +192,7 @@ class ChatSemanticAnalyzer:
     """Analyzes semantic evolution in chat histories."""
     
     def __init__(self, max_user_messages: int = 1200):
-        self.text_embedder = TextEmbedder()
+        self.text_embedder = get_text_embedder()
         self.store = UniversalMemoryStore()
         self.max_user_messages = max_user_messages
     

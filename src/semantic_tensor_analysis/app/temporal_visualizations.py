@@ -34,7 +34,7 @@ def create_temporal_semantic_flow(temporal_manager, resolution: TemporalResoluti
     # Apply PCA for visualization
     from sklearn.decomposition import PCA
     pca = PCA(n_components=2)
-    coords_2d = pca.fit_transform(embeddings.numpy())
+    coords_2d = pca.fit_transform(embeddings.detach().cpu().numpy())
     
     # Create timeline data
     timeline_data = []

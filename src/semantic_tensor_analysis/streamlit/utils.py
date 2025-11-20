@@ -8,7 +8,7 @@ import streamlit as st
 import time
 import torch
 import numpy as np
-from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+from semantic_tensor_analysis.memory import get_text_embedder
 from semantic_tensor_analysis.memory.store import append
 import re
 from collections import Counter
@@ -61,18 +61,8 @@ def add_chat_message(role, text):
     st.session_state.chat_meta.append(meta_row)
 
 
-_TEXT_EMBEDDER_SINGLETON: TextEmbedder | None = None
-
-
-def _get_text_embedder() -> TextEmbedder:
-    global _TEXT_EMBEDDER_SINGLETON
-    if _TEXT_EMBEDDER_SINGLETON is None:
-        _TEXT_EMBEDDER_SINGLETON = TextEmbedder()
-    return _TEXT_EMBEDDER_SINGLETON
-
-
 def _get_sentence_embedding(text: str) -> torch.Tensor:
-    embedder = _get_text_embedder()
+    embedder = get_text_embedder()
     embedding = embedder.process_raw_data(text, session_id="streamlit_utils_chat")
     seq = embedding.sequence_embedding
     return seq.unsqueeze(0) if seq.ndim == 1 else seq

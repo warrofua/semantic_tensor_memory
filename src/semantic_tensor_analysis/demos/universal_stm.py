@@ -19,7 +19,7 @@ from semantic_tensor_analysis.memory.universal_core import (
     UniversalMemoryStore, Modality, create_universal_embedder,
     EventDescriptor, UniversalEmbedding
 )
-from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+from semantic_tensor_analysis.memory import get_text_embedder
 
 console = Console()
 
@@ -36,7 +36,7 @@ def demo_text_modality():
     console.print("\n[bold blue]📝 TEXT MODALITY DEMONSTRATION[/bold blue]")
     
     # Create text embedder
-    text_embedder = TextEmbedder()
+    text_embedder = get_text_embedder()
     
     # Sample clinical/therapeutic texts
     texts = [

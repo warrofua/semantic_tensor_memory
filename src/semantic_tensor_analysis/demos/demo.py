@@ -1,5 +1,5 @@
 import time, torch
-from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+from semantic_tensor_analysis.memory import get_text_embedder
 from semantic_tensor_analysis.memory.store import load, append
 from semantic_tensor_analysis.memory.drift import drift_series, token_drift
 from semantic_tensor_analysis.visualization.viz.pca_plot import plot, plot_drift
@@ -11,15 +11,6 @@ import functools
 import csv
 import tkinter as tk
 from tkinter import filedialog
-
-_TEXT_EMBEDDER = None
-
-
-def _get_embedder() -> TextEmbedder:
-    global _TEXT_EMBEDDER
-    if _TEXT_EMBEDDER is None:
-        _TEXT_EMBEDDER = TextEmbedder()
-    return _TEXT_EMBEDDER
 
 
 def import_csv_to_memory():
@@ -44,7 +35,7 @@ def import_csv_to_memory():
             text = row.get('text', '').strip()
             if not text:
                 continue
-            emb = _get_embedder().process_raw_data(text, session_id="demo_csv").sequence_embedding
+            emb = get_text_embedder().process_raw_data(text, session_id="demo_csv").sequence_embedding
             emb = emb.unsqueeze(0) if emb.ndim == 1 else emb
             # Store all columns as metadata
             meta_row = dict(row)
@@ -114,7 +105,7 @@ def main():
             continue
         
         # Process new input
-        emb = _get_embedder().process_raw_data(text, session_id="demo_input").sequence_embedding
+        emb = get_text_embedder().process_raw_data(text, session_id="demo_input").sequence_embedding
         emb = emb.unsqueeze(0) if emb.ndim == 1 else emb
         meta_row = {
             "ts": time.time(),

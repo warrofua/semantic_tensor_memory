@@ -3,7 +3,6 @@
 This package implements the core functionality for the Semantic Tensor Memory system,
 including token embedding, storage management, and drift analysis.
 
-"""
 Modules:
     embedder: BERT-based token embedding generation
     store: Tensor storage, serialization, and management

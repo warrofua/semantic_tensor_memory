@@ -44,10 +44,10 @@ def cleanup_memory() -> None:
 @st.cache_resource
 def get_cached_text_embedder():
     """Load and cache the heavy text embedder model exactly once per session."""
-    from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+    from semantic_tensor_analysis.memory import get_text_embedder
 
     st.info("🔄 Loading embedding models (this happens once per session)...")
-    embedder = TextEmbedder()
+    embedder = get_text_embedder()
     st.success("✅ Models loaded and cached!")
     return embedder
 

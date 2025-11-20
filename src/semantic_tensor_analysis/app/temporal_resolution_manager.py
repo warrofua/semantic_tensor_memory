@@ -20,8 +20,8 @@ from datetime import datetime, date, timedelta
 import numpy as np
 from collections import defaultdict
 
+from semantic_tensor_analysis.memory import get_text_embedder
 from semantic_tensor_analysis.memory.universal_core import UniversalEmbedding, UniversalMemoryStore
-from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
 from semantic_tensor_analysis.chat.history_analyzer import ChatMessage
 
 
@@ -101,7 +101,8 @@ class TemporalResolutionManager:
     """
     
     def __init__(self):
-        self.text_embedder = TextEmbedder()
+        # Reuse shared embedder to avoid repeated large model loads.
+        self.text_embedder = get_text_embedder()
         self.universal_store = UniversalMemoryStore()
         
         # Multi-resolution storage

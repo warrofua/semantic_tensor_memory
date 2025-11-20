@@ -1,23 +1,21 @@
 # Semantic Tensor Analysis
 
-A **temporal semantic evolution analysis framework** for tracking how meaning changes across time, tokens, and context. STA provides ready-made analysis workflows, drift metrics, and specialized visualizations for understanding semantic trajectories through sessions of text.
+Semantic Tensor Analysis (STA) is a Python/Streamlit toolkit for examining how meaning shifts across ordered text sessions. It keeps token-level detail alongside session-level summaries so you can inspect drift without losing context.
 
 ## What is STA?
 
-**Semantic Tensor Analysis** is a toolkit for analyzing how meaning evolves across temporal sequences:
+- ✅ Token- and session-level embeddings (BERT + Sentence-BERT) in one pipeline
+- ✅ Drift metrics and clustering for ordered text sessions (CSV/JSON/TXT)
+- ✅ Visual explanations (PCA, heatmaps, trajectories) tailored to time-ordered data
+- ✅ Domain presets for clinical notes, learning progress, research logs, and conversations
 
-- ✅ **Analysis framework** for temporal semantic evolution
-- ✅ **Visualization toolkit** for meaning drift across sessions
-- ✅ **Research platform** for studying how concepts evolve over time
-- ✅ **Domain-specific workflows** for clinical progress tracking, learning journeys, conversation analysis, and research note evolution
+### Core approach: dual resolution
 
-### Core Innovation: Dual-Resolution Temporal Analysis
+STA tracks meaning at two resolutions:
+- **Token-level** (BERT): follow individual concept drift
+-, **Session-level** (Sentence-BERT): follow overall semantic movement
 
-STA tracks semantic meaning at two resolutions simultaneously:
-- **Token-level granularity** (via BERT tokenization) - track individual concept drift
-- **Sequence-level semantics** (via Sentence-BERT) - track holistic meaning evolution
-
-This enables both fine-grained token alignment analysis and high-level semantic trajectory computation.
+Both are kept so you can align tokens while also inspecting higher-level trajectories.
 
 ---
 
@@ -123,70 +121,44 @@ for note in therapy_notes:
 
 ---
 
-## ✨ Features: What Makes STA Unique
+## Capabilities
 
-### 🎯 Temporal Semantic Analysis
+### Temporal semantic analysis
 
-**1. Ragged Tensor Operations for Variable-Length Sessions**
-- Handle sessions with 100-500 tokens each using masked batch operations
-- `pad_and_stack()`: Convert variable-length sequences to padded tensors with masks
-- `masked_session_means()`: Compute statistics ignoring padding
-- Critical for session-level analysis while preserving token-level detail
+- Mask-aware batching for variable-length sessions (`pad_and_stack`, `masked_session_means`)
+- Token-level drift with Hungarian alignment and token importance drift
+- Trajectories with velocity/acceleration to spot rapid semantic shifts
+- PCA + clustering over ordered sessions for broad patterns and transitions
 
-**2. Token-Level Drift Analysis via Optimal Alignment**
-- Hungarian algorithm for optimal token-to-token matching across sessions
-- Identify which specific concepts/words changed between sessions
-- `token_importance_drift()`: Quantify which tokens drifted most
-- Token alignment heatmaps showing cross-session concept mapping
+### Visualizations
 
-**3. Semantic Trajectory Computation**
-- **Velocity**: Rate of meaning change between consecutive sessions
-- **Acceleration**: When semantic change accelerated or decelerated
-- **Inflection point detection**: Identify when meaning shifted rapidly
-- 3D trajectory visualization through semantic space over time
+- PCA timelines and 3D trajectories
+- Similarity and token-alignment heatmaps
+- Concept evolution and transition graphs
+- Ridgeline/distribution views
+- Trajectory tunnel (experimental) for long-run drift
 
-**4. Global Temporal Operations**
-- **PCA across all sessions**: Define semantic axes based on complete dataset
-- **Concept clustering**: Group sessions by semantic similarity (KMeans)
-- **Cluster transition tracking**: When did meaning move from theme A to theme B?
-- **Temporal patterns**: Identify cycles, trends, and evolution patterns
+### LLM-assisted insights
 
-### 📊 Specialized Visualizations (~40% of Codebase)
+- Token + sentence embeddings kept together for downstream prompts
+- Domain-aware summaries (clinical, learning, research, conversations)
+- Axis interpretation for PCA dimensions
 
-- **Semantic Drift River**: 3D "river" visualization of meaning flow over time
-- **PCA Timeline Animations**: Watch semantic position evolve across sessions
-- **Temporal Heatmaps**: Session-to-session similarity matrices
-- **Token Alignment Plots**: Visualize optimal token matching
-- **Concept Evolution Graphs**: How themes emerged, peaked, and faded
-- **Ridgeline Plots**: Distribution evolution across time
-- **Liminal Tunnel Visualization**: Immersive drift tunnel
-- **4D Semantic Space**: Multi-dimensional semantic trajectories
+### Workflows
 
-### 🧠 Domain-Adaptive AI Analysis
+- Clinical progress tracking
+- Learning/journey mapping
+- Research note evolution
+- Conversation/topic drift
+- Draft/version comparison
 
-- **Dual-resolution embeddings**: Token-level (BERT) + sentence-level (S-BERT) simultaneously
-- **Domain inference**: Automatically detect ABA therapy, clinical notes, learning journeys, research
-- **Time-scale awareness**: Adaptive analysis for daily, weekly, monthly, or quarterly patterns
-- **LLM-powered insights**: Via Ollama integration for semantic narrative generation
-- **Axis interpretation**: Explain what PCA dimensions mean in domain-specific terms
+### Practicalities
 
-### 🛠️ Ready-Made Analysis Workflows
-
-- **Clinical Progress Tracking**: ABA therapy, patient notes, treatment evolution
-- **Learning Journey Mapping**: How understanding evolves through course materials
-- **Research Evolution**: Track how hypotheses and questions change over time
-- **Conversation Analysis**: Understand topic drift in dialogue
-- **Content Versioning**: Analyze how writing/ideas change across drafts
-
-### 📦 Production-Ready Features
-
-- Multi-format data ingestion (CSV, JSON, TXT)
-- Persistent storage with CPU/GPU portability
-- Session state management for interactive exploration
-- Performance optimization with adaptive processing
-- Comprehensive test suite (6 test modules, 13k+ lines)
-- Streamlit web UI with 7 analysis tabs
-- CLI demo for rapid iteration
+- CSV/JSON/TXT ingestion
+- Persistent storage (CPU-portable)
+- Session state management in Streamlit
+- Test suite coverage across embedding, storage, and viz
+- CLI demo for fast iteration
 
 ---
 

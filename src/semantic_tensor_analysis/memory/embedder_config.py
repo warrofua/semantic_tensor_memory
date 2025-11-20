@@ -29,6 +29,16 @@ HYBRID_CONFIG = {
     'sentence_model': 'sentence-transformers/all-mpnet-base-v2'
 }
 
+# Allow legacy embedders only when explicitly opted in (or under pytest).
+ALLOW_LEGACY = os.environ.get("STA_ALLOW_LEGACY_EMBEDDERS") == "1" or "PYTEST_CURRENT_TEST" in os.environ
+
+
+def _require_legacy_support():
+    if not ALLOW_LEGACY:
+        raise RuntimeError(
+            "Legacy embedders are disabled. Set STA_ALLOW_LEGACY_EMBEDDERS=1 to enable DUAL/HYBRID modes."
+        )
+
 def set_embedding_mode(mode: str, config: Optional[Dict] = None):
     """Set the global embedding mode."""
     global CURRENT_MODE, HYBRID_CONFIG
@@ -56,11 +66,13 @@ def get_embedder():
         return embed_sentence, get_token_count
 
     elif CURRENT_MODE == EmbeddingMode.DUAL:
+        _require_legacy_support()
         from archive.legacy_embedders.dual_embedder import embed_sentence, get_token_count
         print("🚀 Using dual embedding system (BERT tokens + S-BERT sentences)")
         return embed_sentence, get_token_count
 
     elif CURRENT_MODE == EmbeddingMode.HYBRID:
+        _require_legacy_support()
         return get_hybrid_embedder()
 
     else:
