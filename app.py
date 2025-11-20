@@ -15,7 +15,13 @@ import warnings
 import numpy as np
 from PIL import Image
 from typing import List, Dict, Any, Optional, Tuple, Union
-import torch
+try:
+    import torch
+except ModuleNotFoundError as _torch_exc:  # pragma: no cover - runtime safeguard
+    torch = None  # type: ignore[assignment]
+    _missing_torch_error = _torch_exc
+else:
+    _missing_torch_error = None
 import gc
 import psutil
 from pathlib import Path
@@ -42,19 +48,19 @@ if COMMON_APP_DIR.exists() and str(COMMON_APP_DIR) not in sys.path:
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
-# Set environment variables to prevent PyTorch/Streamlit conflicts
+# Set environment variables to prevent PyTorch/Streamlit conflicts (if torch is present)
 os.environ['TORCH_USE_CUDA_DSA'] = '0'
 os.environ['TORCH_DISABLE_WARN'] = '1'
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Fix for Universal STM
 
-# Prevent PyTorch from interfering with Streamlit's file watcher
-try:
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
-    if hasattr(torch, '_C') and hasattr(torch._C, '_disable_jit_profiling'):
-        torch._C._disable_jit_profiling()
-except Exception:
-    pass
+if torch is not None:
+    try:
+        torch.set_num_threads(1)
+        torch.set_num_interop_threads(1)
+        if hasattr(torch, '_C') and hasattr(torch._C, '_disable_jit_profiling'):
+            torch._C._disable_jit_profiling()
+    except Exception:
+        pass
 
 # Import Semantic Tensor Analysis modules
 from semantic_tensor_analysis import (
@@ -2388,6 +2394,10 @@ def render_explainability_dashboard():
 
 def main():
     """Main application with clean, intuitive interface."""
+    if _missing_torch_error is not None:
+        st.error("PyTorch is required to run Semantic Tensor Analysis. Install with `pip install torch` (CPU is fine).")
+        return
+
     # Clean up any rerun flags
     if st.session_state.get("csv_imported", False):
         st.session_state["csv_imported"] = False
