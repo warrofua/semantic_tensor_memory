@@ -136,6 +136,7 @@ def render_enhanced_concept_analysis_tab() -> None:
 
         if viz_choice == "🔥 Cluster Heatmap":
             st.subheader("🎯 Cluster Details")
+            # Avoid nested expanders: show cluster detail directly with an inner toggle
             for cluster in concept_evolution.concept_clusters[:5]:
                 with st.expander(
                     f"Cluster {cluster.cluster_id}: {', '.join(cluster.theme_keywords[:3])}"
@@ -147,20 +148,19 @@ def render_enhanced_concept_analysis_tab() -> None:
                     with col2:
                         st.write(f"**Keywords:** {', '.join(cluster.theme_keywords)}")
                         st.write(f"**Sample:** {cluster.representative_text[:150]}...")
-                    with st.expander("🔎 Token Alignment (top exemplars)"):
-                        if len(cluster.session_indices) >= 2:
-                            a = cluster.session_indices[0]
-                            b = cluster.session_indices[1]
-                            st.caption(f"Aligning Session {a+1} and Session {b+1}")
-                            if st.button(
-                                f"Show alignment for Cluster {cluster.cluster_id}",
-                                key=f"cluster_align_{cluster.cluster_id}",
-                            ):
-                                try:
-                                    token_alignment_heatmap(st.session_state.memory, a, b)
-                                    st.caption("Close the Matplotlib window to continue.")
-                                except Exception as exc:  # pragma: no cover - visualization path
-                                    st.error(f"Alignment failed: {exc}")
+                    if len(cluster.session_indices) >= 2:
+                        a = cluster.session_indices[0]
+                        b = cluster.session_indices[1]
+                        st.caption(f"🔎 Token alignment uses first two sessions in cluster: {a+1} vs {b+1}")
+                        if st.button(
+                            f"Show alignment for Cluster {cluster.cluster_id}",
+                            key=f"cluster_align_{cluster.cluster_id}",
+                        ):
+                            try:
+                                token_alignment_heatmap(st.session_state.memory, a, b)
+                                st.caption("Close the Matplotlib window to continue.")
+                            except Exception as exc:  # pragma: no cover - visualization path
+                                st.error(f"Alignment failed: {exc}")
         elif viz_choice == "📊 Drift Timeline" and concept_evolution.drift_patterns:
             st.subheader("📋 Drift Pattern Summary")
             drift_df = pd.DataFrame(

@@ -350,8 +350,10 @@ def create_universal_embedder(modality: str) -> ModalityEmbedder:
         from .text_embedder import TextEmbedder
         return TextEmbedder()
     elif modality_enum == Modality.VISION:
-        from .vision_embedder import VisionEmbedder
-        return VisionEmbedder()
+        raise NotImplementedError(
+            "Vision modality is disabled (CLIP dependency removed). "
+            "Re-enable by supplying a vision embedder implementation."
+        )
     elif modality_enum == Modality.AUDIO:
         raise NotImplementedError(f"Audio modality not yet implemented - ready for development")
     else:

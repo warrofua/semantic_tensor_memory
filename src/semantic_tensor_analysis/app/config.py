@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import warnings
 from typing import Optional
 
@@ -45,8 +46,8 @@ def setup_environment() -> None:
 
 def configure_page(
     *,
-    page_title: str = "Universal Multimodal STM",
-    page_icon: Optional[str] = "🌐",
+    page_title: str = "Semantic Tensor Analysis",
+    page_icon: Optional[str] = None,
     layout: str = "wide",
     initial_sidebar_state: str = "expanded",
 ) -> None:
@@ -55,9 +56,14 @@ def configure_page(
         assert _streamlit_import_error is not None
         raise _streamlit_import_error
 
+    icon = page_icon
+    if icon is None:
+        asset_path = Path(__file__).resolve().parent / "assets" / "3D_Trajectory_Arrow.png"
+        icon = str(asset_path) if asset_path.exists() else "🌐"
+
     st.set_page_config(
         page_title=page_title,
-        page_icon=page_icon,
+        page_icon=icon,
         layout=layout,
         initial_sidebar_state=initial_sidebar_state,
     )

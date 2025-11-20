@@ -1,6 +1,6 @@
 # AGENTS.md - AI Assistant Project Guide
 
-**Last Updated:** 2025-01-19
+**Last Updated:** 2025-11-20
 **Project:** Semantic Tensor Analysis (STA)
 **Status:** Production-ready (with enhancement opportunities)
 
@@ -49,7 +49,7 @@ semantic_tensor_analysis/
 │   │   ├── tabs/                   # Individual tab implementations
 │   │   └── services/               # Service layer
 │   │
-│   ├── chat/                       # LLM analysis (Ollama)
+│   ├── chat/                       # LLM analysis (llama.cpp/Ollama)
 │   │   ├── analysis.py             # Domain-aware insights
 │   │   └── history_analyzer.py     # Chat history parsing
 │   │
@@ -207,22 +207,22 @@ Optional: LLM narrative (Ollama)
 ### Phase 1: Cleanup & Stabilization (HIGH PRIORITY)
 
 1. **Fix Test Suite**
-   - Resolve Streamlit import conflicts
-   - Increase test coverage to >60%
-   - Add integration tests for full workflows
-   - Set up basic CI/CD
+   - ✅ Resolve Streamlit import conflicts (tests use stubs)
+   - ✅ Add integration tests for full workflows
+   - ⚪ Increase test coverage to >60% (28 tests currently)
+   - ⚪ Set up basic CI/CD
 
 2. **Storage Management**
-   - Implement session cleanup utilities
-   - Add storage size monitoring
-   - Document storage requirements
-   - Consider compression strategies
+   - ✅ Implement session cleanup utilities (StorageManager CLI)
+   - ✅ Add storage size monitoring (stats API/CLI + sidebar expander; cleanup preview/delete)
+   - ⚪ Document storage requirements
+   - ⚪ Consider compression strategies
 
 3. **Code Consolidation**
-   - Remove duplicate embedding code
-   - Consolidate legacy modules
-   - Add .gitignore entries for memory files
-   - Type hints throughout
+   - ✅ Route legacy `embed_sentence` callers to TextEmbedder/dual_embedder
+   - ⚪ Archive legacy embedder variants (embedder_cls/embedder_sbert/embedder_hybrid/dual_embedder) under archive/
+   - ⚪ Add .gitignore entries for memory files
+   - ⚪ Type hints throughout
 
 4. **Documentation**
    - Add missing docstrings
@@ -233,11 +233,9 @@ Optional: LLM narrative (Ollama)
 ### Phase 2: Feature Enhancements (MEDIUM PRIORITY)
 
 5. **llama.cpp Integration** ⭐ REQUESTED
-   - Add `llama-cpp-python` dependency
-   - Create LlamaCppAnalyzer class
-   - Integration with existing chat/analysis.py
-   - Support for local GGUF models
-   - Fallback to Ollama if unavailable
+   - ✅ llama.cpp backend wired (localhost:8080 default; Ollama deprecated)
+   - ⚪ Document setup + GGUF recommendations (e.g., Qwen3-VL-4B-Instruct GGUF for M4/16GB)
+   - ⚪ Harden vision snapshot → sidebar model flow
 
 6. **Performance Optimization**
    - Profile memory usage on large datasets
@@ -284,7 +282,7 @@ Optional: LLM narrative (Ollama)
 3. **Analysis & Visualization**
    - `streamlit/utils.py` - PCA pipeline, data loading
    - `visualization/viz/` - Core visualization functions
-   - `chat/analysis.py` - LLM-powered insights
+   - `chat/analysis.py (llama.cpp default)` - LLM-powered insights
 
 ### Common Tasks
 
@@ -389,10 +387,10 @@ tests/
 
 ## 🔌 Integration Points
 
-### Current Integrations
+### Current Integrations (Ollama deprecated)
 
-1. **Ollama** (`chat/analysis.py`)
-   - Local LLM inference
+1. **llama.cpp** (`chat/analysis.py`)
+   - Local LLM inference (localhost:8080 default, Ollama deprecated)
    - Domain-aware prompts
    - Streaming responses
 
@@ -530,19 +528,25 @@ ls src/semantic_tensor_analysis/app/tabs/
 find tests/ -name "test_*.py"
 ```
 
+### Testing Expectations
+
+- Default: run the full test suite (`venv/bin/pytest`) after meaningful changes; do not skip tests unless unavoidable.
+- If a skip is necessary (e.g., missing external backend), document the reason and how to re-enable it.
+- Use minimal skips; aim for zero skipped tests in normal development environments.
+
 ---
 
 ## 🎯 Current Focus: llama.cpp Integration
 
 ### Objective
-Add llama.cpp support as an alternative to Ollama for local LLM inference.
+Add llama.cpp support as the default local LLM inference path (Ollama deprecated in UI).
 
 ### Requirements
 1. Add `llama-cpp-python` to dependencies
 2. Create `LlamaCppAnalyzer` class in `chat/`
-3. Support GGUF model loading
+3. Support GGUF model loading (vision-capable where possible)
 4. Integrate with existing `analysis.py` workflow
-5. Provide fallback to Ollama if llama.cpp unavailable
+5. (Deprecated) Ollama fallback not used in sidebar; llama.cpp is default
 6. Update documentation
 
 ### Implementation Strategy

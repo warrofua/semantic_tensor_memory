@@ -2,7 +2,7 @@
 
 ## 🚀 **Low Effort, Maximum Effect** - Analyze Your AI Conversations!
 
-Your Universal Multimodal STM system now includes **Chat History Analysis** - the easiest way to understand how your thinking and communication style has evolved through your conversations with AI assistants.
+Your Semantic Tensor Analysis system now includes **Chat History Analysis** - the easiest way to understand how your thinking and communication style has evolved through your conversations with AI assistants.
 
 ## ✨ **What It Does**
 

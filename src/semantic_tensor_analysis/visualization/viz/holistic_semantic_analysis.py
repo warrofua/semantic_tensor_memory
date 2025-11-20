@@ -23,7 +23,16 @@ from sklearn.manifold import TSNE
 import torch
 import umap
 
-from semantic_tensor_analysis.memory.embedder import embed_sentence
+from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+
+_TEXT_EMBEDDER: TextEmbedder | None = None
+
+
+def _get_text_embedder() -> TextEmbedder:
+    global _TEXT_EMBEDDER
+    if _TEXT_EMBEDDER is None:
+        _TEXT_EMBEDDER = TextEmbedder()
+    return _TEXT_EMBEDDER
 
 def infer_semantic_theme(concepts: List[str]) -> Optional[str]:
     """
@@ -184,8 +193,8 @@ def create_concept_embeddings(concepts: Dict[str, Dict]) -> Dict[str, torch.Tens
     
     for concept in concepts.keys():
         try:
-            # Create embedding for the concept
-            embedding = embed_sentence(concept)
+            emb = _get_text_embedder().process_raw_data(concept, session_id="holistic_concept").sequence_embedding
+            embedding = emb.unsqueeze(0) if emb.ndim == 1 else emb
             if embedding.numel() > 0:
                 # Take mean to get fixed-size representation
                 concept_embeddings[concept] = embedding.mean(dim=0)
@@ -222,7 +231,8 @@ def find_semantic_clusters(concept_embeddings: Dict[str, torch.Tensor],
     # Prepare embeddings matrix
     concept_names = list(concept_embeddings.keys())
     embeddings_matrix = torch.stack([concept_embeddings[c] for c in concept_names])
-    embeddings_np = embeddings_matrix.numpy()
+    # Ensure tensor lives on CPU before converting to numpy (MPS/ CUDA safe)
+    embeddings_np = embeddings_matrix.detach().cpu().numpy()
     
     # Standardize embeddings
     scaler = StandardScaler()
@@ -367,6 +377,16 @@ def track_category_emergence(clusters: Dict[str, List[str]],
                 emergence_scores.append(session_score / total_possible)
             else:
                 emergence_scores.append(0.0)
+
+        # Add a simple momentum smoothing to create more dynamic curves
+        if emergence_scores:
+            smoothed = []
+            alpha = 0.35  # higher -> more responsive, lower -> smoother
+            prev = emergence_scores[0]
+            for val in emergence_scores:
+                prev = alpha * val + (1 - alpha) * prev
+                smoothed.append(prev)
+            emergence_scores = smoothed
         
         category_emergence[cluster_name] = emergence_scores
     
@@ -809,7 +829,7 @@ def create_concept_network_plot(concept_embeddings: Dict[str, torch.Tensor],
     # Calculate 2D positions using UMAP
     concepts = list(concept_embeddings.keys())
     embeddings_matrix = torch.stack([concept_embeddings[c] for c in concepts])
-    embeddings_np = embeddings_matrix.numpy()
+    embeddings_np = embeddings_matrix.detach().cpu().numpy()
     
     # Use UMAP for better 2D projection
     try:

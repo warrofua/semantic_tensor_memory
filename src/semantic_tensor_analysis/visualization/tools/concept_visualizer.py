@@ -189,8 +189,8 @@ class ConceptVisualizer:
         if not evolution.concept_persistence:
             return go.Figure().add_annotation(text="No persistence data to visualize")
         
-        themes = list(evolution.concept_persistence.keys())
-        persistence_values = list(evolution.concept_persistence.values())
+        themes = [str(t) for t in evolution.concept_persistence.keys()]
+        persistence_values = [float(v) for v in evolution.concept_persistence.values()]
         
         fig = go.Figure(data=[go.Pie(
             labels=themes,
@@ -224,7 +224,7 @@ class ConceptVisualizer:
         
         # Add nodes (clusters)
         for cluster in clusters:
-            theme_str = ", ".join(cluster.theme_keywords[:2])
+            theme_str = ", ".join(str(k) for k in cluster.theme_keywords[:2])
             G.add_node(cluster.cluster_id, 
                       label=f"C{cluster.cluster_id}: {theme_str}",
                       size=len(cluster.session_indices),

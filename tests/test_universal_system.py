@@ -1,17 +1,34 @@
 #!/usr/bin/env python3
 """
-Universal Multimodal STM Test Suite
+Semantic Tensor Analysis Test Suite
 
 Demonstrates the universal architecture working across multiple modalities
 while preserving STM's core concepts and enabling cross-modal analysis.
 """
 
 import torch
+import pytest
 import time
 from semantic_tensor_analysis.memory.universal_core import (
     UniversalMemoryStore, Modality, create_universal_embedder, EventDescriptor, UniversalEmbedding
 )
 from semantic_tensor_analysis.memory.text_embedder import TextEmbedder, create_text_embedding
+
+
+@pytest.fixture
+def store():
+    """Provide a small universal store for cross-modal drift tests."""
+    text_embedder = TextEmbedder()
+    store = UniversalMemoryStore()
+    seed_texts = [
+        "Quick check-in about project status",
+        "Exploring ideas for semantic drift analysis",
+        "Summarizing next steps for the team",
+    ]
+    for idx, text in enumerate(seed_texts):
+        emb = text_embedder.process_raw_data(text, session_id=f"fixture_session_{idx}")
+        store.add_session(emb)
+    return store
 
 def test_universal_text_embedding():
     """Test text modality in universal framework."""
@@ -146,22 +163,11 @@ def test_vision_modality():
         from semantic_tensor_analysis.memory.vision_embedder import VisionEmbedder, CLIP_AVAILABLE
         
         if not CLIP_AVAILABLE:
-            print("⚠️  CLIP not available - skipping vision tests")
-            print("   Install with: pip install git+https://github.com/openai/CLIP.git")
+            print("⚠️  Vision modality disabled (CLIP removed) - skipping vision tests")
             return None
-        
-        # Create vision embedder
+
+        # Create vision embedder (will raise if still disabled)
         vision_embedder = VisionEmbedder()
-        
-        print(f"🎥 Vision embedder initialized")
-        print(f"  Model: {vision_embedder.model_name}")
-        print(f"  Embedding dim: {vision_embedder.embedding_dimension}")
-        print(f"  Device: {vision_embedder.device}")
-        
-        # Create a simple test "image" (placeholder)
-        print(f"\n📷 Note: Vision testing requires actual images")
-        print(f"   This demonstrates the architecture readiness")
-        
         return vision_embedder
         
     except ImportError as e:
@@ -297,7 +303,7 @@ def demonstrate_extensibility():
     
     print("🔧 The universal architecture enables easy extension:")
     print("   • Text: ✅ Implemented (BERT + S-BERT)")
-    print("   • Vision: ✅ Implemented (CLIP)")
+    print("   • Vision: ⚪ Disabled (CLIP removed; ready for replacement)")
     print("   • Audio: 🔄 Ready for implementation (Whisper + acoustic analysis)")
     print("   • Thermal: 🔄 Ready for implementation (temperature event detection)")
     print("   • Motion: 🔄 Ready for implementation (accelerometer analysis)")
@@ -349,7 +355,7 @@ def main():
         print("✅ Backward compatibility preserved")
         print("✅ STM's core concepts enhanced for multimodal future")
         
-        print(f"\n🎯 SUCCESS: Universal Multimodal STM is ready!")
+        print(f"\n🎯 SUCCESS: Semantic Tensor Analysis is ready!")
         print(f"   The system preserves STM's innovation while enabling")
         print(f"   unprecedented multimodal semantic memory capabilities.")
         

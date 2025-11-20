@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from semantic_tensor_analysis.optimization.performance import AdaptiveDataProcessor
+from semantic_tensor_analysis.memory.universal_core import UniversalEmbedding
 
 from .models import (
     cleanup_memory,
@@ -30,6 +31,52 @@ __all__ = [
     "process_unified_sessions",
     "render_upload_screen",
 ]
+
+AI_CONVERSATION_MAX_USER_MESSAGES = 1200
+
+
+def _limit_ai_conversation_messages(messages, max_user_messages: int):
+    """Cap AI conversation size to avoid memory blow-ups."""
+    user_messages = [m for m in messages if getattr(m, "role", "").lower() == "user"]
+    capped = len(user_messages) > max_user_messages
+    if not capped:
+        return messages, {
+            "was_capped": False,
+            "original_user_messages": len(user_messages),
+            "kept_user_messages": len(user_messages),
+            "kept_total_messages": len(messages),
+            "stride": 1,
+        }
+
+    stride = max(1, len(user_messages) // max_user_messages)
+    sampled_users = user_messages[::stride][:max_user_messages]
+    sampled_ids = {id(msg) for msg in sampled_users}
+
+    limited_messages = []
+    attach_assistant = False
+    kept_assistants = 0
+
+    for msg in messages:
+        role = getattr(msg, "role", "").lower()
+        if role == "user" and id(msg) in sampled_ids:
+            limited_messages.append(msg)
+            attach_assistant = True  # keep the immediate assistant reply for context
+        elif attach_assistant and role == "assistant":
+            limited_messages.append(msg)
+            kept_assistants += 1
+            attach_assistant = False
+        else:
+            if role == "assistant":
+                attach_assistant = False
+
+    return limited_messages, {
+        "was_capped": True,
+        "original_user_messages": len(user_messages),
+        "kept_user_messages": len(sampled_users),
+        "kept_total_messages": len(limited_messages),
+        "stride": stride,
+        "kept_assistants": kept_assistants,
+    }
 
 
 def detect_file_type_and_content(uploaded_file) -> Tuple[str, str]:
@@ -92,8 +139,13 @@ def detect_file_type_and_content(uploaded_file) -> Tuple[str, str]:
     return "unknown", "unknown"
 
 
-def convert_ai_conversation_to_sessions(messages) -> List[Dict[str, Any]]:
+def convert_ai_conversation_to_sessions(
+    messages, apply_limit: bool = True, max_user_messages: int = AI_CONVERSATION_MAX_USER_MESSAGES
+) -> List[Dict[str, Any]]:
     """Convert chat messages to CSV-like session dictionaries."""
+    if apply_limit:
+        messages, _ = _limit_ai_conversation_messages(messages, max_user_messages)
+
     sessions: List[Dict[str, Any]] = []
     user_messages = [msg for msg in messages if getattr(msg, "role", "") == "user"]
 
@@ -127,16 +179,48 @@ def handle_unified_upload(uploaded_file) -> bool:
         st.info(f"🔍 Detected: {file_type.upper()} file with {content_type.replace('_', ' ')}")
 
         if content_type == "ai_conversation":
-            with st.spinner("🤖 Processing AI conversation data..."):
-                file_content = uploaded_file.read().decode("utf-8")
-                messages = parse_chat_history(file_content)
-                if not messages:
-                    st.error("❌ No conversation messages found in the uploaded file")
-                    return False
-                session_data = convert_ai_conversation_to_sessions(messages)
-                if len(session_data) < 2:
-                    st.error("❌ Need at least 2 user messages for analysis")
-                    return False
+            progress_bar = st.progress(0.0)
+            status_text = st.empty()
+            try:
+                with st.spinner("🤖 Processing AI conversation data..."):
+                    status_text.info("📥 Reading file...")
+                    file_content = uploaded_file.read().decode("utf-8")
+                    progress_bar.progress(0.2)
+
+                    status_text.info("🧩 Parsing conversation...")
+                    messages = parse_chat_history(file_content)
+                    progress_bar.progress(0.4)
+
+                    if not messages:
+                        st.error("❌ No conversation messages found in the uploaded file")
+                        return False
+
+                    status_text.info("🎯 Applying safety limits...")
+                    messages, cap_info = _limit_ai_conversation_messages(
+                        messages, AI_CONVERSATION_MAX_USER_MESSAGES
+                    )
+                    progress_bar.progress(0.6)
+                    if cap_info["was_capped"]:
+                        st.warning(
+                            f"⚡ Large conversation detected ({cap_info['original_user_messages']:,} user messages). "
+                            f"Sampled to {cap_info['kept_user_messages']:,} messages "
+                            f"(kept every ~{cap_info['stride']}th message plus immediate replies) "
+                            "to prevent memory issues."
+                        )
+
+                    status_text.info("📊 Converting to sessions...")
+                    st.session_state["uploaded_chat_messages"] = messages
+                    session_data = convert_ai_conversation_to_sessions(
+                        messages, apply_limit=False
+                    )
+                    progress_bar.progress(0.85)
+                    if len(session_data) < 2:
+                        st.error("❌ Need at least 2 user messages for analysis")
+                        return False
+            finally:
+                progress_bar.progress(1.0)
+                progress_bar.empty()
+                status_text.empty()
         elif content_type == "csv_sessions":
             with st.spinner("📊 Processing CSV session data..."):
                 csv_data = uploaded_file.read().decode("utf-8")
@@ -266,7 +350,11 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
                     )
                     universal_store.add_session(embedding)
                     st.session_state.active_modalities.add("text")
-                    memory.append(embedding)
+
+                    # Store legacy tensor for compatibility (avoid pickling UniversalEmbedding)
+                    legacy_tensor = embedding.event_embeddings
+                    session["tokens"] = legacy_tensor.shape[0] if legacy_tensor is not None else 0
+                    memory.append(legacy_tensor)
                     meta.append(session)
                     valid_sessions += 1
                     processing_quality["successful_embeddings"] += 1
@@ -338,13 +426,23 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
         st.session_state.meta = meta
         st.session_state.universal_store = universal_store
         from semantic_tensor_analysis.memory.store import save
+        def _token_count(session):
+            if isinstance(session, UniversalEmbedding):
+                if session.event_embeddings is not None:
+                    return session.event_embeddings.shape[0]
+                return 0
+            # Fallback for legacy tensors
+            try:
+                return session.shape[0]
+            except Exception:
+                return 0
 
         st.session_state.dataset_info = {
             "source": content_type,
             "filename": filename,
             "upload_timestamp": time.time(),
             "session_count": len(memory),
-            "total_tokens": sum(m.shape[0] for m in memory),
+            "total_tokens": sum(_token_count(m) for m in memory),
             "universal_sessions": len(universal_store.embeddings),
             "active_modalities": list(st.session_state.active_modalities),
             "memory_usage": final_memory,
@@ -364,7 +462,11 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
             },
         }
 
-        save(memory, meta)
+        # Only save legacy tensor format when applicable; UniversalEmbedding is already persisted via UniversalMemoryStore.
+        if memory and not isinstance(memory[0], UniversalEmbedding):
+            save(memory, meta)
+        else:
+            st.info("💾 Sessions stored via Universal Memory; legacy tensor save skipped.")
 
         st.success(
             f"""
@@ -417,7 +519,7 @@ def render_upload_screen() -> None:
     st.markdown(
         """
     <div style="text-align: center; padding: 2rem 0;">
-        <h1>🌐 Universal Multimodal STM</h1>
+        <h1>🌐 Semantic Tensor Analysis</h1>
         <h3 style="color: #666;">Analyze how meaning evolves across conversations and sessions</h3>
     </div>
     """,
@@ -471,15 +573,9 @@ def render_upload_screen() -> None:
             if os.path.exists(demo_path):
                 with open(demo_path, "rb") as file_handle:
                     content = file_handle.read()
-                mock_file = type(
-                    "MockFile",
-                    (),
-                    {
-                        "name": "ultimate_demo_dataset.csv",
-                        "read": lambda: content,
-                        "seek": lambda _pos: None,
-                    },
-                )()
+                import io
+                mock_file = io.BytesIO(content)
+                mock_file.name = "ultimate_demo_dataset.csv"  # type: ignore[attr-defined]
                 if handle_unified_upload(mock_file):
                     st.rerun()
             else:

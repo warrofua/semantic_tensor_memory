@@ -8,7 +8,7 @@ import streamlit as st
 import time
 import torch
 import numpy as np
-from semantic_tensor_analysis.memory.embedder import embed_sentence
+from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
 from semantic_tensor_analysis.memory.store import append
 import re
 from collections import Counter
@@ -17,7 +17,6 @@ from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.decomposition import TruncatedSVD
 import warnings
-import requests
 
 
 def initialize_session_state():
@@ -51,7 +50,7 @@ def initialize_session_state():
 
 def add_chat_message(role, text):
     """Add a chat message to the chat memory."""
-    emb = embed_sentence(text)
+    emb = _get_sentence_embedding(text)
     meta_row = {
         "ts": time.time(),
         "role": role,
@@ -62,16 +61,21 @@ def add_chat_message(role, text):
     st.session_state.chat_meta.append(meta_row)
 
 
-def is_ollama_model_available(model_name):
-    """Check if an Ollama model is available locally."""
-    try:
-        resp = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if resp.status_code == 200:
-            tags = resp.json().get("models", [])
-            return any(model_name in m.get("name", "") for m in tags)
-    except Exception:
-        pass
-    return False
+_TEXT_EMBEDDER_SINGLETON: TextEmbedder | None = None
+
+
+def _get_text_embedder() -> TextEmbedder:
+    global _TEXT_EMBEDDER_SINGLETON
+    if _TEXT_EMBEDDER_SINGLETON is None:
+        _TEXT_EMBEDDER_SINGLETON = TextEmbedder()
+    return _TEXT_EMBEDDER_SINGLETON
+
+
+def _get_sentence_embedding(text: str) -> torch.Tensor:
+    embedder = _get_text_embedder()
+    embedding = embedder.process_raw_data(text, session_id="streamlit_utils_chat")
+    seq = embedding.sequence_embedding
+    return seq.unsqueeze(0) if seq.ndim == 1 else seq
 
 
 def remove_highly_correlated_features(X, threshold=0.95):
@@ -120,7 +124,11 @@ def remove_low_variance_features(X, threshold=1e-6):
 
 
 def robust_outlier_detection(X, method='iqr', factor=1.5):
-    """Detect and handle outliers in the data."""
+    """Detect and handle outliers in the data.
+
+    Returns:
+        tuple: (clipped_array, stats_dict)
+    """
     try:
         if method == 'iqr':
             Q1 = np.percentile(X, 25, axis=0)
@@ -135,14 +143,32 @@ def robust_outlier_detection(X, method='iqr', factor=1.5):
             
             outlier_count = np.sum(np.any((X < lower_bound) | (X > upper_bound), axis=1))
             if outlier_count > 0:
-                st.info(f"Clipped {outlier_count} outlier samples using IQR method")
+                stats = st.session_state.setdefault("iqr_clip_stats", {"calls": 0, "total_clipped": 0})
+                stats["calls"] += 1
+                stats["total_clipped"] += int(outlier_count)
+                st.session_state["iqr_clip_stats"] = stats
+
+                # Show a single concise notice to avoid flooding the UI
+                if not st.session_state.get("iqr_clip_notice_shown"):
+                    st.info(
+                        f"Clipped outliers using IQR (first batch: {outlier_count} samples). "
+                        "Further clipping will be summarized silently."
+                    )
+                    st.session_state["iqr_clip_notice_shown"] = True
             
-            return X_clipped
+            stats = {
+                "method": "iqr",
+                "factor": factor,
+                "outliers": int(outlier_count),
+                "lower_bound": lower_bound.tolist(),
+                "upper_bound": upper_bound.tolist(),
+            }
+            return X_clipped, stats
         
-        return X
+        return X, {"method": method, "factor": factor, "outliers": 0}
     except Exception as e:
         st.warning(f"Could not detect outliers: {e}")
-        return X
+        return X, {"method": method, "factor": factor, "error": str(e)}
 
 
 def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=False, 
@@ -196,7 +222,7 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
             return None
         
         # Step 4: Outlier detection and handling
-        flat = robust_outlier_detection(flat, method='iqr', factor=2.0)
+        flat, iqr_stats = robust_outlier_detection(flat, method='iqr', factor=2.0)
         
         # Step 5: Remove low-variance features
         flat, variance_mask = remove_low_variance_features(flat, threshold=1e-8)
@@ -310,33 +336,28 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
             'scaler_type': scaler_type,
             'quality_score': quality_score,
             'quality_assessment': quality,
-            'components': components
+            'components': components,
+            'iqr_clipping': iqr_stats,
         }
         
         if return_scaler:
             results['scaler'] = scaler
         
-        # Step 16: Display improvement suggestions and mask diagnostics
-        with st.expander("🔧 Analysis Improvements Applied", expanded=False):
+        # Optional diagnostics (collapsed by default)
+        with st.expander("Diagnostics", expanded=False):
             st.markdown(f"""
-            **Preprocessing Enhancements:**
-            - ✅ **Outlier handling**: IQR-based clipping applied
-            - ✅ **Feature selection**: Removed low-variance and highly correlated features
-            - ✅ **Robust scaling**: Used {scaler_type} for better standardization
-            - ✅ **Method selection**: Used {method_used} for optimal stability
-            
             **Quality Metrics:**
-            - **Explained variance**: {cumulative_var[-1]:.1%}
-            - **Condition number**: {condition_number:.2e}
-            - **Quality score**: {quality_score:.2f}/1.0 ({quality})
-            - **Features processed**: {results['original_features']} → {results['n_features']}
+            - Explained variance: {cumulative_var[-1]:.1%}
+            - Condition number: {condition_number:.2e}
+            - Quality score: {quality_score:.2f}/1.0 ({quality})
+            - Features processed: {results['original_features']} → {results['n_features']}
             """)
             st.markdown(f"""
             **Masking Diagnostics:**
-            - **Total slots**: {total_slots}
-            - **Valid (unmasked)**: {valid_slots}
-            - **Masked**: {masked_slots} ({mask_ratio:.1%})
-            - **Samples used**: {flat_scaled.shape[0]}
+            - Total slots: {total_slots}
+            - Valid (unmasked): {valid_slots}
+            - Masked: {masked_slots} ({mask_ratio:.1%})
+            - Samples used: {flat_scaled.shape[0]}
             """)
             
             if condition_number > 1e10:

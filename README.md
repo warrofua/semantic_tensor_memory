@@ -203,11 +203,9 @@ Expected columns (typical): `session_id`, `date`, `title` (optional), `text`.
 
 ## 🤖 LLM Backend Setup
 
-STA supports two LLM backends for semantic analysis and insights:
+STA uses **llama.cpp** as the default backend (sidebar auto-configured to `http://localhost:8080`, model `local`). Ollama UI is deprecated.
 
-### Option 1: llama.cpp (Recommended)
-
-**Advantages**: Faster inference, lower memory footprint, no server required
+**Advantages**: Faster inference, lower memory footprint, vision support with the right GGUF.
 
 1. **Install llama-cpp-python:**
    ```bash
@@ -215,55 +213,17 @@ STA supports two LLM backends for semantic analysis and insights:
    ```
 
 2. **Download a GGUF model:**
+   - Vision (Apple M4/16GB): `Qwen/Qwen3-VL-4B-Instruct-GGUF` (e.g., Q4_0 or Q4_K_M).
+   - Text-only: 4–8B Q4/Q5 GGUFs (Mistral-7B, Llama-3-8B, Qwen2-7B, Phi-3-Mini) work well.
 
-   Recommended models (4-8GB):
-   - **Mistral-7B-Instruct**: [Download GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF)
-   - **Llama-3-8B-Instruct**: [Download GGUF](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF)
-   - **Qwen2-7B-Instruct**: [Download GGUF](https://huggingface.co/Qwen/Qwen2-7B-Instruct-GGUF)
-   - **Phi-3-Mini** (smaller, faster): [Download GGUF](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf)
-
-   Example:
+3. **Run `llama-server`:**
    ```bash
-   # Download to a models directory
-   mkdir -p ~/models
-   cd ~/models
-   wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+   ./server -m /path/to/model.gguf -c 4096 --host 0.0.0.0 --port 8080
    ```
 
-3. **Configure in Streamlit app:**
-   - Open the "⚙️ LLM Configuration" expander in the AI Insights tab
-   - Select "llama.cpp" backend
-   - Click "📁 Browse" to select your GGUF model file (or enter path manually)
-   - Adjust CPU threads and GPU layers as needed
-
-### Option 2: Ollama
-
-**Advantages**: Easy model management, familiar interface
-
-1. **Install Ollama:**
-   ```bash
-   # macOS/Linux
-   curl -fsSL https://ollama.ai/install.sh | sh
-
-   # Or download from https://ollama.ai
-   ```
-
-2. **Pull a model:**
-   ```bash
-   ollama pull qwen3:latest
-   # or
-   ollama pull mistral:latest
-   ```
-
-3. **Start Ollama server:**
-   ```bash
-   ollama serve
-   ```
-
-4. **Configure in Streamlit app:**
-   - Open the "⚙️ LLM Configuration" expander
-   - Select "Ollama" backend
-   - Choose your model from the dropdown
+4. **In the app:**
+   - Sidebar auto-uses llama.cpp at `http://localhost:8080` with model `local`.
+   - Vision snapshot button will leverage a vision-capable GGUF if provided.
 
 ### No LLM (Optional)
 
@@ -290,6 +250,7 @@ You can use STA without any LLM backend. The core analysis and visualizations wo
 - The Streamlit app renders Matplotlib figures inline; no external windows will block interaction.
 - Key dependencies: `torch`, `transformers`, `scikit-learn`, `plotly`, `streamlit`, `pandas`, `numpy`, `rich`, `requests`, `llama-cpp-python`.
 - **tkinter** (for file browser): Usually pre-installed with Python. On Linux, install with `sudo apt-get install python3-tk` if needed.
+- **Storage:** Session files are stored under `data/universal/`. Check sidebar storage stats and use the cleanup expander to prune old sessions; CLI available via `python -m semantic_tensor_analysis.storage.manager --stats` and cleanup options.
 
 ---
 

@@ -217,8 +217,15 @@ class _Tensor:
     def dim(self):
         return len(self.shape)
 
+# Stub torch module only if real torch is unavailable
+try:
+    import torch as _real_torch  # noqa: F401
+    _real_torch_available = True
+except ImportError:
+    _real_torch_available = False
+
 # Stub torch module
-if "torch" not in sys.modules:
+if not _real_torch_available:
     torch_stub = ModuleType("torch")
     torch_stub.Tensor = _Tensor
     torch_stub.float32 = "float"
@@ -361,8 +368,10 @@ if "torch" not in sys.modules:
     torch_stub.testing = testing_module
 
     sys.modules["torch"] = torch_stub
-
-import torch
+    import torch  # type: ignore
+else:
+    import torch  # real torch
+    torch_stub = torch  # satisfy downstream references
 
 # Stub drift module with deterministic implementations
 if "semantic_tensor_analysis.memory.drift" not in sys.modules:
@@ -501,7 +510,7 @@ def stub_embeddings(monkeypatch):
     )
 
     embedder = importlib.import_module("semantic_tensor_analysis.memory.embedder")
-    dual_embedder = importlib.import_module("semantic_tensor_analysis.memory.dual_embedder")
+    dual_embedder = importlib.import_module("archive.legacy_embedders.dual_embedder")
     embedder_config = importlib.import_module("semantic_tensor_analysis.memory.embedder_config")
 
     importlib.reload(embedder)

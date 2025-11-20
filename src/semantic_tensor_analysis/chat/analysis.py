@@ -7,18 +7,15 @@ semantic content rather than technical metrics.
 Supports multiple LLM backends:
 - llama.cpp (local GGUF models)
 - llama.cpp server (HTTP)
-- Ollama (local Ollama server)
 """
 
 import streamlit as st
-import requests
 import json
 from typing import Iterator, Optional
 from pathlib import Path
 
 from semantic_tensor_analysis.streamlit.utils import (
     add_chat_message,
-    is_ollama_model_available,
     collect_comprehensive_analysis_data,
 )
 
@@ -173,37 +170,15 @@ def create_targeted_insights_prompt(analysis_data):
     return base
 
 
-def stream_ollama_response(prompt_text, model_name):
-    """Stream response from Ollama API."""
-    url = "http://localhost:11434/api/generate"
-    payload = {
-        "model": model_name,
-        "prompt": prompt_text,
-        "stream": True
-    }
-    try:
-        with requests.post(url, json=payload, stream=True, timeout=180) as r:
-            for line in r.iter_lines():
-                if line:
-                    try:
-                        data = json.loads(line.decode("utf-8"))
-                        yield data.get("response", "")
-                    except Exception:
-                        continue
-    except Exception as e:
-        yield f"Error connecting to Ollama: {e}"
-
-
-def stream_unified_response(prompt_text: str, backend: str = "ollama", **kwargs) -> Iterator[str]:
-    """Stream response from unified LLM backend (llama.cpp or Ollama).
+def stream_unified_response(prompt_text: str, backend: str = "llama_cpp", **kwargs) -> Iterator[str]:
+    """Stream response from unified LLM backend (llama.cpp local or server).
 
     Args:
         prompt_text: The prompt to send to the LLM
-        backend: Backend to use ("ollama", "llama_cpp", or "llama_server")
+        backend: Backend to use ("llama_cpp" or "llama_server")
         **kwargs: Additional arguments for the backend
             For llama.cpp: model_path, n_ctx, n_threads, n_gpu_layers
             For llama_server: server_url, server_model
-            For Ollama: model_name
 
     Yields:
         str: Response tokens from the LLM
@@ -241,10 +216,6 @@ def stream_unified_response(prompt_text: str, backend: str = "ollama", **kwargs)
             )
         except Exception as e:
             yield f"Error with llama-server: {e}"
-
-    elif backend == "ollama":
-        model_name = kwargs.get('model_name', 'qwen3:latest')
-        yield from stream_ollama_response(prompt_text, model_name)
 
     else:
         yield "Error: Invalid backend specified or llama.cpp not available"
@@ -328,20 +299,8 @@ def render_chat_analysis_panel(context=None, tab_id=None):
         backend = backend_status
         backend_config = dict(backend_config)
 
-        # Validation for Ollama
-        if backend == 'ollama':
-            selected_model = backend_config.get('model_name', 'qwen3:latest')
-            if not is_ollama_model_available(selected_model):
-                st.warning(
-                    f"The model '{selected_model}' is not available in your local Ollama. "
-                    f"To download it, run this command in your terminal:\n\n"
-                    f"```sh\nollama pull {selected_model}\n```"
-                )
-                st.session_state[streaming_key] = False
-                return
-
         # Validation for llama.cpp
-        elif backend == 'llama_cpp':
+        if backend == 'llama_cpp':
             model_path = backend_config.get('model_path', '')
             if not model_path or not Path(model_path).exists():
                 st.warning(

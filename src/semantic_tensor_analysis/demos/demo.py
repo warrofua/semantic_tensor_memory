@@ -1,15 +1,26 @@
 import time, torch
-from semantic_tensor_analysis.memory.embedder import embed_sentence
+from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
 from semantic_tensor_analysis.memory.store import load, append
 from semantic_tensor_analysis.memory.drift import drift_series, token_drift
 from semantic_tensor_analysis.visualization.viz.pca_plot import plot, plot_drift
 from semantic_tensor_analysis.visualization.viz.heatmap import heatmap, token_heatmap
 import os
+import functools
 
 # For CSV import
 import csv
 import tkinter as tk
 from tkinter import filedialog
+
+_TEXT_EMBEDDER = None
+
+
+def _get_embedder() -> TextEmbedder:
+    global _TEXT_EMBEDDER
+    if _TEXT_EMBEDDER is None:
+        _TEXT_EMBEDDER = TextEmbedder()
+    return _TEXT_EMBEDDER
+
 
 def import_csv_to_memory():
     """Open a file dialog to select a CSV and import its contents as memory sessions."""
@@ -33,7 +44,8 @@ def import_csv_to_memory():
             text = row.get('text', '').strip()
             if not text:
                 continue
-            emb = embed_sentence(text)
+            emb = _get_embedder().process_raw_data(text, session_id="demo_csv").sequence_embedding
+            emb = emb.unsqueeze(0) if emb.ndim == 1 else emb
             # Store all columns as metadata
             meta_row = dict(row)
             meta_row['tokens'] = emb.shape[0]
@@ -102,7 +114,8 @@ def main():
             continue
         
         # Process new input
-        emb = embed_sentence(text)
+        emb = _get_embedder().process_raw_data(text, session_id="demo_input").sequence_embedding
+        emb = emb.unsqueeze(0) if emb.ndim == 1 else emb
         meta_row = {
             "ts": time.time(),
             "text": text,

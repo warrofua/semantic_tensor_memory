@@ -1,7 +1,7 @@
 """Unified LLM analyzer with multiple backend support.
 
 This module provides a unified interface for LLM analysis that can
-automatically select and use the best available backend (llama.cpp or Ollama).
+automatically select and use the best available backend (local llama.cpp or llama.cpp server).
 """
 
 from typing import Iterator, Optional, Dict, Any, Literal
@@ -11,14 +11,14 @@ import json
 
 from .llama_cpp_analyzer import LlamaCppAnalyzer, is_llama_cpp_available
 
-Backend = Literal["auto", "llama_cpp", "llama_server", "ollama", "none"]
+Backend = Literal["auto", "llama_cpp", "llama_server", "none"]
 
 
 class UnifiedLLMAnalyzer:
     """Unified interface for LLM analysis with multiple backends.
 
     Automatically selects the best available backend or allows manual selection.
-    Supports both llama.cpp (for GGUF models) and Ollama.
+    Supports both llama.cpp (for GGUF models) and llama.cpp server (OpenAI-compatible).
 
     Example:
         >>> # Auto-select backend
@@ -40,28 +40,22 @@ class UnifiedLLMAnalyzer:
         llama_cpp_n_ctx: int = 4096,
         llama_cpp_n_threads: int = 4,
         llama_cpp_n_gpu_layers: int = 0,
-        ollama_model: str = "qwen3:latest",
-        ollama_base_url: str = "http://localhost:11434",
         llama_server_url: str = "http://localhost:8080",
         llama_server_model: str = "local",
     ):
         """Initialize unified LLM analyzer.
 
         Args:
-            backend: Backend to use ("auto", "llama_cpp", "ollama", "none")
+            backend: Backend to use ("auto", "llama_cpp", "llama_server", "none")
             llama_cpp_model_path: Path to GGUF model (for llama.cpp backend)
             llama_cpp_n_ctx: Context window size for llama.cpp
             llama_cpp_n_threads: Number of threads for llama.cpp
             llama_cpp_n_gpu_layers: GPU layers for llama.cpp
-        ollama_model: Model name for Ollama
-        ollama_base_url: Base URL for Ollama API
-        llama_server_url: Base URL for llama.cpp server (OpenAI-compatible)
-        llama_server_model: Model name configured in llama-server
+            llama_server_url: Base URL for llama.cpp server (OpenAI-compatible)
+            llama_server_model: Model name configured in llama-server
         """
         self.backend_type = backend
         self.llama_cpp_model_path = llama_cpp_model_path
-        self.ollama_model = ollama_model
-        self.ollama_base_url = ollama_base_url
         self.llama_server_url = llama_server_url.rstrip("/")
         self.llama_server_model = llama_server_model
 
@@ -80,8 +74,6 @@ class UnifiedLLMAnalyzer:
             )
         elif self.backend_type == "llama_server":
             self._init_llama_server()
-        elif self.backend_type == "ollama":
-            self._init_ollama()
         elif self.backend_type == "none":
             warnings.warn("No LLM backend available")
 
@@ -90,7 +82,7 @@ class UnifiedLLMAnalyzer:
 
         Priority:
         1. llama.cpp (if model path provided and library available)
-        2. Ollama (if server is running)
+        2. llama.cpp server (if reachable)
         3. none (no backend available)
 
         Returns:
@@ -104,10 +96,6 @@ class UnifiedLLMAnalyzer:
                     return "llama_cpp"
             except Exception:
                 pass
-
-        # Fall back to Ollama
-        if self._is_ollama_available():
-            return "ollama"
 
         # Fall back to llama.cpp server if reachable
         if self._is_llama_server_available():
@@ -138,15 +126,6 @@ class UnifiedLLMAnalyzer:
             warnings.warn(f"Failed to initialize llama.cpp: {e}")
             self.backend_type = "none"
 
-    def _init_ollama(self) -> None:
-        """Initialize Ollama backend (just verify it's available)."""
-        if not self._is_ollama_available():
-            warnings.warn(
-                f"Ollama server not available at {self.ollama_base_url}. "
-                "Make sure Ollama is running."
-            )
-            self.backend_type = "none"
-
     def _init_llama_server(self) -> None:
         """Initialize llama.cpp server backend (verify it is available)."""
         if not self._is_llama_server_available():
@@ -155,17 +134,6 @@ class UnifiedLLMAnalyzer:
                 "Start it with: llama-server -m <model.gguf> --port 8080"
             )
             self.backend_type = "none"
-
-    def _is_ollama_available(self) -> bool:
-        """Check if Ollama server is available."""
-        try:
-            response = requests.get(
-                f"{self.ollama_base_url}/api/tags",
-                timeout=2
-            )
-            return response.status_code == 200
-        except Exception:
-            return False
 
     def _is_llama_server_available(self) -> bool:
         """Check if llama.cpp server is available."""
@@ -209,37 +177,14 @@ class UnifiedLLMAnalyzer:
                 temperature=temperature,
                 image_base64=image_base64,
             )
-        elif self.backend_type == "ollama":
-            yield from self._stream_ollama_response(prompt)
         else:
             yield (
                 "LLM analysis not available. Please:\n"
                 "1. Install llama-cpp-python and provide a model path, OR\n"
-                "2. Install and run Ollama (https://ollama.ai)\n"
+                "2. Run llama-server with a GGUF model (OpenAI-compatible endpoint)\n"
                 "\n"
                 "See documentation for setup instructions."
             )
-
-    def _stream_ollama_response(self, prompt: str) -> Iterator[str]:
-        """Stream response from Ollama API."""
-        url = f"{self.ollama_base_url}/api/generate"
-        payload = {
-            "model": self.ollama_model,
-            "prompt": prompt,
-            "stream": True
-        }
-
-        try:
-            with requests.post(url, json=payload, stream=True, timeout=180) as r:
-                for line in r.iter_lines():
-                    if line:
-                        try:
-                            data = json.loads(line.decode("utf-8"))
-                            yield data.get("response", "")
-                        except Exception:
-                            continue
-        except Exception as e:
-            yield f"\n\nError connecting to Ollama: {e}"
 
     def _stream_llama_server_response(
         self,
@@ -341,9 +286,6 @@ class UnifiedLLMAnalyzer:
             return "".join(
                 self._stream_llama_server_response(prompt, max_tokens, temperature)
             )
-        elif self.backend_type == "ollama":
-            # Collect streaming response
-            return "".join(self._stream_ollama_response(prompt))
         else:
             return "LLM analysis not available."
 
@@ -368,11 +310,6 @@ class UnifiedLLMAnalyzer:
                 'llama_server_url': self.llama_server_url,
                 'llama_server_model': self.llama_server_model,
             })
-        elif self.backend_type == "ollama":
-            info.update({
-                'ollama_model': self.ollama_model,
-                'ollama_base_url': self.ollama_base_url
-            })
 
         return info
 
@@ -382,8 +319,6 @@ class UnifiedLLMAnalyzer:
             return f"UnifiedLLMAnalyzer(backend=llama.cpp, model={self.llama_cpp_model_path})"
         elif self.backend_type == "llama_server":
             return f"UnifiedLLMAnalyzer(backend=llama.cpp server, url={self.llama_server_url})"
-        elif self.backend_type == "ollama":
-            return f"UnifiedLLMAnalyzer(backend=ollama, model={self.ollama_model})"
         else:
             return "UnifiedLLMAnalyzer(backend=none)"
 
@@ -395,7 +330,7 @@ def create_analyzer(
     """Factory function to create a UnifiedLLMAnalyzer.
 
     Args:
-        backend: Backend to use ("auto", "llama_cpp", "ollama", "none")
+        backend: Backend to use ("auto", "llama_cpp", "llama_server", "none")
         **kwargs: Additional arguments passed to UnifiedLLMAnalyzer
 
     Returns:

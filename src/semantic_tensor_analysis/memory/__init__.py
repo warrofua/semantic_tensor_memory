@@ -9,7 +9,7 @@ Modules:
     drift: Semantic drift analysis and metrics
 """
 
-from .embedder import embed_sentence, get_token_count
+from .text_embedder import embed_sentence, get_token_count
 from .store import load, save, append, to_batch, flatten
 from .drift import drift_series, token_drift, cosine, session_mean
 

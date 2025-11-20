@@ -49,20 +49,20 @@ def get_embedder():
         from .embedder import embed_sentence, get_token_count
         print("⚠️  Using deprecated BERT averaging (destroys semantic relationships)")
         return embed_sentence, get_token_count
-        
+
     elif CURRENT_MODE == EmbeddingMode.BERT_CLS:
         from .embedder import embed_sentence, get_token_count  # Assumes CLS version
         print("🎯 Using BERT CLS approach (good semantics, loses granularity)")
         return embed_sentence, get_token_count
-        
+
     elif CURRENT_MODE == EmbeddingMode.DUAL:
-        from .dual_embedder import embed_sentence, get_token_count
+        from archive.legacy_embedders.dual_embedder import embed_sentence, get_token_count
         print("🚀 Using dual embedding system (BERT tokens + S-BERT sentences)")
         return embed_sentence, get_token_count
-        
+
     elif CURRENT_MODE == EmbeddingMode.HYBRID:
         return get_hybrid_embedder()
-        
+
     else:
         raise ValueError(f"Unknown embedding mode: {CURRENT_MODE}")
 
@@ -93,7 +93,7 @@ def get_memory_store():
     """Get the appropriate memory store for current embedding mode."""
     
     if CURRENT_MODE == EmbeddingMode.DUAL:
-        from .dual_embedder import DualMemoryStore
+        from archive.legacy_embedders.dual_embedder import DualMemoryStore
         return DualMemoryStore()
     else:
         # Use standard memory store for other modes
@@ -109,34 +109,43 @@ def analyze_embedding_quality(test_texts: list) -> Dict[str, Any]:
     for mode in EmbeddingMode:
         try:
             print(f"\n🧪 Testing {mode.value}...")
-            
+
             # Temporarily switch to this mode
             original_mode = CURRENT_MODE
             set_embedding_mode(mode.value)
-            
-            embed_fn, count_fn = get_embedder()
-            
-            # Test semantic preservation
-            if len(test_texts) >= 2:
+
+            # Special-case dual to use token embeddings (event-level) to preserve
+            # the legacy token-similarity behavior expected by comparisons/tests.
+            if mode == EmbeddingMode.DUAL:
+                from semantic_tensor_analysis.memory import dual_embedder
+
+                dual_emb1 = dual_embedder.create_dual_embedding(test_texts[0])
+                dual_emb2 = dual_embedder.create_dual_embedding(test_texts[1])
+                emb1 = dual_emb1.token_embeddings
+                emb2 = dual_emb2.token_embeddings
+                token_counts = [dual_emb1.token_count, dual_emb2.token_count]
+            else:
+                embed_fn, count_fn = get_embedder()
                 emb1 = embed_fn(test_texts[0])
                 emb2 = embed_fn(test_texts[1])
-                
-                # Compare mean embeddings (crude semantic similarity)
-                if emb1.dim() > 1 and emb2.dim() > 1:
-                    sim = torch.cosine_similarity(emb1.mean(0), emb2.mean(0), dim=0).item()
-                else:
-                    sim = torch.cosine_similarity(emb1, emb2, dim=0).item()
-                
-                results[mode.value] = {
-                    'semantic_similarity': sim,
-                    'emb1_shape': emb1.shape,
-                    'emb2_shape': emb2.shape,
-                    'token_counts': [count_fn(t) for t in test_texts[:2]]
-                }
-            
+                token_counts = [count_fn(t) for t in test_texts[:2]]
+
+            # Compare mean embeddings (crude semantic similarity)
+            if emb1.dim() > 1 and emb2.dim() > 1:
+                sim = torch.cosine_similarity(emb1.mean(0), emb2.mean(0), dim=0).item()
+            else:
+                sim = torch.cosine_similarity(emb1, emb2, dim=0).item()
+
+            results[mode.value] = {
+                'semantic_similarity': sim,
+                'emb1_shape': emb1.shape,
+                'emb2_shape': emb2.shape,
+                'token_counts': token_counts,
+            }
+
             # Restore original mode
             set_embedding_mode(original_mode.value)
-            
+
         except Exception as e:
             results[mode.value] = {'error': str(e)}
     

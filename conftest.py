@@ -6,11 +6,13 @@ from pathlib import Path
 
 # Skip Streamlit imports during tests to avoid heavy/GUI dependencies
 os.environ.setdefault("STA_SKIP_STREAMLIT", "1")
+os.environ.setdefault("STA_LIGHTWEIGHT_EMBEDDER", "1")
 
 # Provide a lightweight Streamlit stub so modules importing streamlit won't fail during tests.
 if os.environ.get("STA_SKIP_STREAMLIT"):
     import types
     import numpy as _np
+    import importlib
 
     class _Stub:
         def __call__(self, *args, **kwargs):
@@ -30,6 +32,22 @@ if os.environ.get("STA_SKIP_STREAMLIT"):
     sys.modules.setdefault("streamlit.components", st_stub)
     sys.modules.setdefault("streamlit.components.v1", st_stub)
 
+    # Minimal sklearn patch to satisfy import hooks in streamlit utils during tests
+    try:
+        import sklearn  # type: ignore
+    except ImportError:
+        sk_stub = types.ModuleType("sklearn")
+        submods = {
+            "sklearn.decomposition": types.ModuleType("sklearn.decomposition"),
+            "sklearn.preprocessing": types.ModuleType("sklearn.preprocessing"),
+            "sklearn.cluster": types.ModuleType("sklearn.cluster"),
+            "sklearn.manifold": types.ModuleType("sklearn.manifold"),
+            "sklearn.metrics.pairwise": types.ModuleType("sklearn.metrics.pairwise"),
+        }
+        for name, module in submods.items():
+            sys.modules[name] = module
+        sys.modules["sklearn"] = sk_stub
+
     # Patch numpy alias missing in newer versions for plotly express
     if not hasattr(_np, "byte"):
         _np.byte = _np.int8
@@ -46,8 +64,12 @@ _ensure_src_on_path()
 
 
 def pytest_collection_modifyitems(items):
-    """Skip heavy or unavailable tests in the minimal sandbox environment."""
+    """
+    Skip heavy tests only when STA_MINIMAL_TESTS=1; otherwise run full suite.
+    """
     import pytest
+    if os.environ.get("STA_MINIMAL_TESTS") != "1":
+        return
 
     skip_reasons = {
         "test_compute_drift_series_simple": "Torch math not reliable in sandbox",

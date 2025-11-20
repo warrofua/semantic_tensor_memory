@@ -21,7 +21,7 @@ from sklearn.preprocessing import RobustScaler
 import torch
 
 from .pca_plot import prepare_for_pca
-from semantic_tensor_analysis.memory.embedder import embed_sentence
+from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
 
 
 def extract_concepts_from_text(text: str, method='keyword') -> List[str]:
@@ -179,6 +179,15 @@ def calculate_concept_embeddings(concepts: List[str], memory: List[torch.Tensor]
     Returns:
         Dictionary mapping concept -> list of embedding tensors (one per session)
     """
+    _text_embedder: Optional[TextEmbedder] = None
+
+    def _embed_concept(text: str) -> torch.Tensor:
+        nonlocal _text_embedder
+        if _text_embedder is None:
+            _text_embedder = TextEmbedder()
+        embedding = _text_embedder.process_raw_data(text, session_id="river_concept").sequence_embedding
+        return embedding.mean(dim=0) if embedding.ndim > 1 else embedding
+
     concept_embeddings = {}
     
     # Validate inputs
@@ -206,10 +215,10 @@ def calculate_concept_embeddings(concepts: List[str], memory: List[torch.Tensor]
                     # Concept appears in this session - use actual embedding
                     try:
                         # Simple approach: embed the concept independently
-                        concept_emb = embed_sentence(concept)
+                        concept_emb = _embed_concept(concept)
                         if concept_emb.numel() > 0:
                             # Take mean to get fixed-size representation
-                            concept_vec = concept_emb.mean(dim=0)
+                            concept_vec = concept_emb.mean(dim=0) if concept_emb.ndim > 1 else concept_emb
                             embeddings_over_time.append(concept_vec)
                         else:
                             raise ValueError("Empty concept embedding")
@@ -228,9 +237,9 @@ def calculate_concept_embeddings(concepts: List[str], memory: List[torch.Tensor]
                     else:
                         # Use zero or session-based embedding
                         try:
-                            concept_emb = embed_sentence(concept)
+                            concept_emb = _embed_concept(concept)
                             if concept_emb.numel() > 0:
-                                concept_vec = concept_emb.mean(dim=0) * 0.1  # Weak signal
+                                concept_vec = (concept_emb.mean(dim=0) if concept_emb.ndim > 1 else concept_emb) * 0.1  # Weak signal
                                 embeddings_over_time.append(concept_vec)
                             else:
                                 embeddings_over_time.append(torch.zeros(embed_dim))

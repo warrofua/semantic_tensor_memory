@@ -1,8 +1,7 @@
 """
-Universal Multimodal Semantic Tensor Memory Analysis Application
+Semantic Tensor Analysis Application
 
 A comprehensive Streamlit application for analyzing semantic evolution across multiple modalities.
-Now powered by Universal Multimodal STM architecture.
 """
 
 import streamlit as st
@@ -27,12 +26,17 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
+from semantic_tensor_analysis.storage.manager import StorageManager
+from semantic_tensor_analysis.memory.universal_core import UniversalEmbedding
 
 BASE_DIR = Path(__file__).resolve().parent
 SRC_DIR = BASE_DIR / "src"
 if SRC_DIR.exists() and str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))  # Ensure local package is importable when running without installation
 DEMO_DATA_PATH = BASE_DIR / "data" / "ultimate_demo_dataset.csv"
+COMMON_APP_DIR = BASE_DIR / "src" / "semantic_tensor_analysis" / "app"
+if COMMON_APP_DIR.exists() and str(COMMON_APP_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_APP_DIR))
 
 # Fix PyTorch/Streamlit compatibility issues
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -52,7 +56,7 @@ try:
 except Exception:
     pass
 
-# Import Universal Multimodal STM modules
+# Import Semantic Tensor Analysis modules
 from semantic_tensor_analysis import (
     UniversalMemoryStore,
     Modality,
@@ -120,7 +124,7 @@ from semantic_tensor_analysis.explainability import (
 
 # Set page config
 st.set_page_config(
-    page_title="Universal Multimodal STM",
+    page_title="Semantic Tensor Analysis",
     page_icon="🌐",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -181,9 +185,9 @@ def get_cached_universal_store():
     """Get cached UniversalMemoryStore."""
     return UniversalMemoryStore()
 
-# Initialize session state with Universal STM support and memory management
+# Initialize session state with Semantic Tensor Analysis support and memory management
 def initialize_universal_session_state():
-    """Initialize session state with Universal Multimodal STM support and memory management."""
+    """Initialize session state with Semantic Tensor Analysis support and memory management."""
     initialize_session_state()  # Call original initialization
     
     # Memory monitoring
@@ -283,32 +287,82 @@ def detect_file_type_and_content(uploaded_file):
 
 def convert_ai_conversation_to_sessions(messages):
     """
-    Convert AI conversation messages to CSV-like session format.
+    Convert AI conversation messages to multi-resolution temporal format.
+    
+    NEW: Now supports both legacy format and multi-resolution analysis.
     
     Args:
         messages: List of ChatMessage objects
         
     Returns:
-        List of dict objects compatible with CSV processing
+        List of dict objects compatible with CSV processing (legacy mode)
+        OR multi-resolution data if enabled
     """
-    sessions = []
+    from temporal_resolution_manager import TemporalResolutionManager, TemporalResolution
     
-    # Filter to user messages only (focus on user's evolution)
-    user_messages = [msg for msg in messages if msg.role == 'user']
+    # Check if multi-resolution is enabled in session state
+    use_multi_resolution = st.session_state.get('enable_multi_resolution', True)
     
-    for i, msg in enumerate(user_messages):
-        session_data = {
-            'text': msg.content,
-            'session_id': i,
-            'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
-            'conversation_id': msg.conversation_id or 'unknown',
-            'message_id': msg.message_id or f'msg_{i}',
-            'source_type': 'ai_conversation',
-            'role': msg.role
+    if use_multi_resolution:
+        # NEW MULTI-RESOLUTION PROCESSING
+        temporal_manager = TemporalResolutionManager()
+        processing_results = temporal_manager.process_conversation_messages(messages)
+        
+        # Store temporal manager in session state for UI access
+        st.session_state.temporal_manager = temporal_manager
+        st.session_state.temporal_processing_results = processing_results
+        
+        # Get current resolution data (start with turn-level for maximum granularity)
+        resolution_data = temporal_manager.zoom_to_resolution(TemporalResolution.TURN)
+        
+        # Convert to legacy session format for compatibility
+        sessions = []
+        for i, meta in enumerate(resolution_data['metadata']):
+            session_data = {
+                'text': meta.get('user_text', ''),
+                'session_id': meta.get('turn_id', f'turn_{i}'),
+                'timestamp': meta.get('timestamp', '').isoformat() if meta.get('timestamp') else None,
+                'conversation_id': meta.get('conversation_id', 'unknown'),
+                'message_id': meta.get('turn_id', f'turn_{i}'),
+                'source_type': 'ai_conversation_multi_res',
+                'role': 'user',
+                'resolution': 'turn',
+                'turn_index': meta.get('turn_index', i),
+                'has_assistant_response': meta.get('has_assistant_message', False)
+            }
+            sessions.append(session_data)
+        
+        # Add processing summary to session state
+        st.session_state.multi_res_summary = {
+            'total_turns': processing_results['turns_created'],
+            'total_conversations': processing_results['conversations_created'],
+            'total_days': processing_results['days_covered'],
+            'temporal_span_days': processing_results['temporal_span_days'],
+            'current_resolution': 'turn'
         }
-        sessions.append(session_data)
+        
+        return sessions
     
-    return sessions
+    else:
+        # LEGACY PROCESSING (original behavior)
+        sessions = []
+        
+        # Filter to user messages only (focus on user's evolution)
+        user_messages = [msg for msg in messages if msg.role == 'user']
+        
+        for i, msg in enumerate(user_messages):
+            session_data = {
+                'text': msg.content,
+                'session_id': i,
+                'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
+                'conversation_id': msg.conversation_id or 'unknown',
+                'message_id': msg.message_id or f'msg_{i}',
+                'source_type': 'ai_conversation',
+                'role': msg.role
+            }
+            sessions.append(session_data)
+        
+        return sessions
 
 
 def handle_unified_upload(uploaded_file):
@@ -590,13 +644,23 @@ def process_unified_sessions(session_data, filename, content_type):
             st.session_state.meta = meta
             st.session_state.universal_store = universal_store
             
+            def _token_count(session):
+                if isinstance(session, UniversalEmbedding):
+                    if session.event_embeddings is not None:
+                        return session.event_embeddings.shape[0]
+                    return 0
+                try:
+                    return session.shape[0]
+                except Exception:
+                    return 0
+
             # Enhanced dataset info with performance metrics
             st.session_state.dataset_info = {
                 'source': content_type,
                 'filename': filename,
                 'upload_timestamp': time.time(),
                 'session_count': len(memory),
-                'total_tokens': sum(m.shape[0] for m in memory),
+                'total_tokens': sum(_token_count(m) for m in memory),
                 'universal_sessions': len(universal_store.embeddings),
                 'active_modalities': list(st.session_state.active_modalities),
                 'memory_usage': final_memory,
@@ -612,7 +676,10 @@ def process_unified_sessions(session_data, filename, content_type):
             }
             
             # Save the data (legacy)
-            save(memory, meta)
+            if memory and not isinstance(memory[0], UniversalEmbedding):
+                save(memory, meta)
+            else:
+                st.info("💾 Sessions stored via Universal Memory; legacy tensor save skipped.")
             
             # Show performance summary
             st.success(f"""
@@ -659,7 +726,7 @@ def render_upload_screen():
 
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0;">
-        <h1>🌐 Universal Multimodal STM</h1>
+        <h1>🌐 Semantic Tensor Analysis</h1>
         <h3 style="color: #666;">Analyze how meaning evolves across conversations and sessions</h3>
     </div>
     """, unsafe_allow_html=True)
@@ -711,14 +778,12 @@ def render_upload_screen():
         if st.button("📚 Load Demo Dataset", type="primary"):
             # Check if demo dataset exists
             if DEMO_DATA_PATH.exists():
-                with DEMO_DATA_PATH.open("rb") as f:
-                    mock_file = type('MockFile', (), {
-                        'name': DEMO_DATA_PATH.name,
-                        'read': lambda: f.read(),
-                        'seek': lambda x: None
-                    })()
-                    if handle_unified_upload(mock_file):
-                        st.rerun()
+                import io
+                content = DEMO_DATA_PATH.read_bytes()
+                mock_file = io.BytesIO(content)
+                mock_file.name = DEMO_DATA_PATH.name  # type: ignore[attr-defined]
+                if handle_unified_upload(mock_file):
+                    st.rerun()
             else:
                 st.error(
                     f"Demo dataset not found at {DEMO_DATA_PATH}. Please upload your own file."
@@ -807,6 +872,13 @@ def render_overview_dashboard():
         <h3 style="color: #666;">{source_label}</h3>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Check if multi-resolution is available
+    has_multi_res = 'temporal_manager' in st.session_state
+    
+    if has_multi_res:
+        render_temporal_zoom_interface()
+        render_multi_resolution_summary()
     
     # Performance Metrics Dashboard (if available)
     if 'performance_metrics' in dataset_info:
@@ -2334,11 +2406,12 @@ def main():
         render_simple_sidebar()
         
         # Main tabs (now with Enhanced Concept Analysis and Explainability)
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
             "🏠 Overview", 
             "🌊 Evolution", 
             "🔍 Patterns", 
             "📐 Dimensionality",
+            "⏱️ Temporal",
             "🧠 Concepts",
             "💡 Explain",
             "🤖 AI Insights"
@@ -2357,14 +2430,161 @@ def main():
             render_dimensionality_tab()
         
         with tab5:
-            render_enhanced_concept_analysis_tab()
+            # Temporal multi-resolution analysis (fallback message if no chat data)
+            try:
+                from semantic_tensor_analysis.app.tabs.temporal import render_temporal_analysis_tab
+                render_temporal_analysis_tab()
+            except Exception as exc:
+                st.info(f"Temporal analysis unavailable: {exc}")
         
         with tab6:
-            render_explainability_dashboard()
+            render_enhanced_concept_analysis_tab()
         
         with tab7:
+            render_explainability_dashboard()
+        
+        with tab8:
             st.header("🤖 AI-Powered Analysis")
             render_comprehensive_chat_analysis()
+
+
+def render_temporal_zoom_interface():
+    """Render the temporal zoom interface for multi-resolution analysis."""
+    st.subheader("🔍 Temporal Resolution Control")
+    
+    if 'temporal_manager' not in st.session_state:
+        st.warning("Multi-resolution data not available")
+        return
+    
+    temporal_manager = st.session_state.temporal_manager
+    from temporal_resolution_manager import TemporalResolution
+    
+    # Get navigation options
+    nav_options = temporal_manager.get_temporal_navigation_options()
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Resolution selector
+        resolution_options = {
+            "🔬 Turn Level": TemporalResolution.TURN,
+            "💬 Conversation Level": TemporalResolution.CONVERSATION, 
+            "📅 Day Level": TemporalResolution.DAY
+        }
+        
+        selected_resolution_name = st.selectbox(
+            "Analysis Resolution",
+            options=list(resolution_options.keys()),
+            index=0,  # Default to turn level
+            help="Choose the temporal granularity for analysis"
+        )
+        selected_resolution = resolution_options[selected_resolution_name]
+    
+    with col2:
+        # Date filter (if applicable)
+        focus_date = None
+        if nav_options['available_dates']:
+            focus_date = st.selectbox(
+                "Focus Date (Optional)",
+                options=[None] + nav_options['available_dates'],
+                format_func=lambda x: "All Dates" if x is None else str(x),
+                help="Filter to specific date"
+            )
+    
+    with col3:
+        # Conversation filter (if applicable and turn level selected)
+        focus_conversation = None
+        if selected_resolution == TemporalResolution.TURN and nav_options['available_conversations']:
+            conv_options = ["All Conversations"] + nav_options['available_conversations']
+            selected_conv = st.selectbox(
+                "Focus Conversation (Optional)",
+                options=conv_options,
+                help="Filter to specific conversation"
+            )
+            if selected_conv != "All Conversations":
+                focus_conversation = selected_conv
+    
+    # Apply zoom if resolution changed
+    current_res = st.session_state.get('current_temporal_resolution')
+    current_date = st.session_state.get('current_focus_date')
+    current_conv = st.session_state.get('current_focus_conversation')
+    
+    if (current_res != selected_resolution or 
+        current_date != focus_date or 
+        current_conv != focus_conversation):
+        
+        # Apply zoom
+        resolution_data = temporal_manager.zoom_to_resolution(
+            selected_resolution, 
+            focus_date=focus_date,
+            focus_conversation=focus_conversation
+        )
+        
+        # Update session state
+        st.session_state.current_temporal_resolution = selected_resolution
+        st.session_state.current_focus_date = focus_date
+        st.session_state.current_focus_conversation = focus_conversation
+        st.session_state.current_resolution_data = resolution_data
+        
+        # Update the main memory and meta for compatibility with existing visualizations
+        if resolution_data['embeddings']:
+            # Convert embeddings to legacy format
+            legacy_embeddings = []
+            new_meta = []
+            
+            for i, (embedding, meta) in enumerate(zip(resolution_data['embeddings'], resolution_data['metadata'])):
+                # Convert tensor to expected shape [tokens, dim]
+                if len(embedding.shape) == 1:
+                    legacy_emb = embedding.unsqueeze(0)  # [1, dim]
+                else:
+                    legacy_emb = embedding
+                
+                legacy_embeddings.append(legacy_emb)
+                
+                # Create metadata
+                new_meta.append({
+                    'text': meta.get('user_text', meta.get('text', '')),
+                    'session_id': meta.get('turn_id', meta.get('session_id', f'item_{i}')),
+                    'timestamp': str(meta.get('timestamp', meta.get('date', ''))),
+                    'resolution': selected_resolution.value,
+                    'tokens': legacy_emb.shape[0],
+                    **meta  # Include original metadata
+                })
+            
+            # Update session state
+            st.session_state.memory = legacy_embeddings
+            st.session_state.meta = new_meta
+            
+            st.success(f"🎯 Zoomed to {selected_resolution.value} level: {len(legacy_embeddings)} items")
+            
+            if focus_date:
+                st.info(f"📅 Filtered to date: {focus_date}")
+            if focus_conversation:
+                st.info(f"💬 Filtered to conversation: {focus_conversation}")
+        
+        st.rerun()
+
+
+def render_multi_resolution_summary():
+    """Render summary of multi-resolution processing results."""
+    if 'multi_res_summary' not in st.session_state:
+        return
+    
+    summary = st.session_state.multi_res_summary
+    
+    with st.expander("🎯 Multi-Resolution Analysis Summary", expanded=True):
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Conversation Turns", summary['total_turns'])
+        with col2:
+            st.metric("Conversations", summary['total_conversations'])
+        with col3:
+            st.metric("Days Covered", summary['total_days'])
+        with col4:
+            st.metric("Temporal Span", f"{summary['temporal_span_days']} days")
+        
+        st.info(f"🔍 Current view: **{summary['current_resolution'].title()} Level** - Use controls above to zoom in/out")
 
 
 if __name__ == "__main__":

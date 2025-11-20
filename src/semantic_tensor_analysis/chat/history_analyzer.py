@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chat History Analyzer for Universal Multimodal STM
+Chat History Analyzer for Semantic Tensor Analysis
 
 Analyzes conversation histories from ChatGPT, Claude, and other AI services
 to reveal semantic evolution patterns in your thinking and communication style.
@@ -191,15 +191,17 @@ class ChatHistoryParser:
 class ChatSemanticAnalyzer:
     """Analyzes semantic evolution in chat histories."""
     
-    def __init__(self):
+    def __init__(self, max_user_messages: int = 1200):
         self.text_embedder = TextEmbedder()
         self.store = UniversalMemoryStore()
+        self.max_user_messages = max_user_messages
     
     def analyze_conversation_history(self, messages: List[ChatMessage]) -> ConversationAnalysis:
         """Analyze semantic evolution in conversation history."""
         
         # Filter to user messages only (focus on user's semantic evolution)
         user_messages = [msg for msg in messages if msg.role == 'user']
+        user_messages = self._limit_user_messages(user_messages)
         
         if len(user_messages) < 2:
             raise ValueError("Need at least 2 user messages for analysis")
@@ -345,6 +347,14 @@ class ChatSemanticAnalyzer:
             })
         
         return analyses
+    
+    def _limit_user_messages(self, user_messages: List[ChatMessage]) -> List[ChatMessage]:
+        """Sample user messages to avoid runaway memory usage."""
+        if len(user_messages) <= self.max_user_messages:
+            return user_messages
+        
+        step = max(1, len(user_messages) // self.max_user_messages)
+        return user_messages[::step][:self.max_user_messages]
 
 def create_chat_analysis_summary(analysis: ConversationAnalysis) -> str:
     """Create a human-readable summary of chat analysis."""

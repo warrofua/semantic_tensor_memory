@@ -1,40 +1,49 @@
-from transformers import AutoTokenizer, AutoModel
-import torch
+"""
+Compatibility wrapper for legacy callers.
+
+All embedding logic now lives in ``text_embedder.TextEmbedder``; this module
+delegates to a singleton instance to keep older imports working.
+"""
+
+from __future__ import annotations
+
 import os
+from functools import lru_cache
 
-MODEL_NAME = "bert-base-uncased"
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModel.from_pretrained(MODEL_NAME)
-EMBED_DIM = model.config.hidden_size  # 768
+import torch
 
-# Fix threading issues
-os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+# Ensure tokenizer threads behave across environments
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+
+@lru_cache(maxsize=1)
+def _get_text_embedder():
+    from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+
+    return TextEmbedder()
+
 
 @torch.inference_mode()
 def embed_sentence(text: str) -> torch.Tensor:
     """
-    Embed a sentence using BERT's [CLS] token representation.
-    
-    🧠 SEMANTIC UPGRADE: Uses [CLS] token instead of averaging all tokens.
-    The [CLS] token is specifically trained to represent the entire sequence
-    and preserves semantic relationships that averaging destroys.
-    
-    Args:
-        text: Input text
-    
-    Returns: 
-        torch.Tensor: [1, embedding_dim] - CLS token representation
+    Return a single-vector embedding for ``text`` (legacy API).
+
+    Uses TextEmbedder under the hood and returns the sequence embedding as
+    a [1, embedding_dim] tensor to stay compatible with historical callers.
     """
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=False)
-    output = model(**inputs)
-    
-    # Use [CLS] token (first token) instead of averaging all tokens
-    # This preserves semantic composition: "I love cats" ≠ "Cats love me"
-    cls_embedding = output.last_hidden_state[0, 0, :]  # [embed_dim]
-    
-    # Return as [1, embed_dim] to maintain compatibility with existing code
-    return cls_embedding.unsqueeze(0)
+    embedder = _get_text_embedder()
+    embedding = embedder.process_raw_data(text, session_id="legacy_embed")
+    seq = embedding.sequence_embedding
+    return seq.unsqueeze(0) if seq.ndim == 1 else seq
+
 
 def get_token_count(text: str) -> int:
-    """Returns 1 since we now produce one semantic vector per session."""
-    return 1
+    """
+    Approximate token count using the same embedder as ``embed_sentence``.
+
+    Falls back to 1 for stub/test mode.
+    """
+    embedder = _get_text_embedder()
+    # In stub mode, event_embeddings is randomly shaped; guard for empty events
+    events = embedder.extract_events(text)
+    return max(len(events), 1)

@@ -36,7 +36,11 @@ try:
     from semantic_tensor_analysis.chat.unified_analyzer import UnifiedLLMAnalyzer
     from semantic_tensor_analysis.chat.analysis import (
         create_semantic_insights_prompt,
-        stream_unified_response
+        create_targeted_insights_prompt,
+        stream_unified_response,
+    )
+    from semantic_tensor_analysis.streamlit.utils import (
+        collect_comprehensive_analysis_data,
     )
     CHAT_AVAILABLE = True
 except ImportError:
@@ -49,7 +53,69 @@ except ImportError:
         return []
 
     create_semantic_insights_prompt = lambda *args, **kwargs: ""  # type: ignore
+    create_targeted_insights_prompt = lambda *args, **kwargs: []  # type: ignore
     stream_unified_response = None  # type: ignore
+    def collect_comprehensive_analysis_data():  # type: ignore
+        return {}
+
+
+def _build_sidebar_prompt(base_context: Dict[str, Any], user_question: Optional[str], deep: bool) -> str:
+    """Construct a sidebar prompt aligned with the AI Insights tab."""
+    base_prompt = create_semantic_insights_prompt(base_context)
+    if deep:
+        targeted = create_targeted_insights_prompt(base_context)
+        base_prompt = base_prompt + "\n\n" + "\n".join(targeted)
+    if user_question:
+        base_prompt += f"\n\nUSER QUESTION:\n{user_question}\n\nGround your answer in the analysis above."
+    return base_prompt
+
+
+def _stream_sidebar_response(prompt: str, include_snapshot: bool) -> None:
+    """Send prompt to LLM with safety checks; renders once to reduce websocket churn."""
+    backend = st.session_state.get('llm_backend', 'none')
+    backend_config = st.session_state.get('llm_backend_config', {})
+
+    if include_snapshot:
+        snapshot = st.session_state.get("page_snapshot_b64")
+        if snapshot:
+            backend_config = {**backend_config, "image_base64": snapshot}
+        else:
+            st.info("📸 Snapshot not available yet; sending text-only this time.")
+            include_snapshot = False
+
+    if include_snapshot and backend != "llama_server":
+        st.warning("📸 Page snapshots require the llama.cpp server backend (vision-capable model).")
+        return
+
+    if backend == 'none':
+        response = "AI assistance is disabled. Please select an LLM backend above to enable chat."
+        st.session_state['sidebar_chat_history'].append(("assistant", response))
+        return
+    if not CHAT_AVAILABLE or stream_unified_response is None:
+        response = "Chat components are unavailable in this environment."
+        st.session_state['sidebar_chat_history'].append(("assistant", response))
+        return
+    if backend == "llama_server" and not backend_config.get("server_url"):
+        response = "Please provide the llama-server URL (e.g., http://localhost:8080)."
+        st.session_state['sidebar_chat_history'].append(("assistant", response))
+        return
+    if backend == "llama_cpp":
+        model_path = backend_config.get("model_path") or st.session_state.get("llama_cpp_model_path")
+        if not model_path or not Path(model_path).exists():
+            st.warning("Please specify a valid path to a GGUF model file in the configuration above.")
+            return
+
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        try:
+            # Collect once to avoid websocket flooding/freezes
+            response = "".join(stream_unified_response(prompt, backend=backend, **backend_config))
+            placeholder.markdown(response)
+            st.session_state['sidebar_chat_history'].append(("assistant", response))
+        except Exception as e:
+            error_msg = f"Error: {e}"
+            placeholder.error(error_msg)
+            st.session_state['sidebar_chat_history'].append(("assistant", error_msg))
 
 
 def _find_local_models(search_roots: Optional[List[Path]] = None, limit: int = 80) -> List[str]:
@@ -171,235 +237,21 @@ def select_folder_with_tkinter(initial_dir: Optional[str] = None) -> Optional[st
 
 
 def render_llm_config_sidebar():
-    """Render LLM configuration in sidebar."""
+    """Render minimal, auto-configured LLM sidebar (llama.cpp server)."""
 
     with st.sidebar:
         st.markdown("---")
         st.subheader("🤖 AI Assistant")
 
-        # Backend selection
-        backend_choices = [("ollama", "Ollama"), ("none", "None")]
-        # Local llama.cpp option only if importable
-        if CHAT_AVAILABLE and is_llama_cpp_available():
-            backend_choices.insert(0, ("llama_cpp", "llama.cpp (local)"))
-        # HTTP llama.cpp server option (does not require local lib)
-        backend_choices.insert(1, ("llama_server", "llama.cpp server (HTTP)"))
-
-        labels = {value: label for value, label in backend_choices}
-        llm_backend = st.selectbox(
-            "LLM Backend",
-            options=[value for value, _ in backend_choices],
-            format_func=lambda v: labels.get(v, v),
-            key="sidebar_llm_backend",
-            help="Select AI backend for chat assistance"
-        )
-
-        # Backend-specific configuration
-        if llm_backend == "llama_cpp":
-            st.markdown("**Model Selection:**")
-
-            # Initialize model path in session state
-            if 'llama_cpp_model_path' not in st.session_state:
-                st.session_state['llama_cpp_model_path'] = ''
-
-            # Show recent models if any
-            if 'recent_llama_models' in st.session_state and st.session_state['recent_llama_models']:
-                # Find current selection index
-                current_model = st.session_state.get('llama_cpp_model_path', '')
-                recent_options = ["[Select a recent model]"] + st.session_state['recent_llama_models']
-                default_index = 0
-                if current_model in st.session_state['recent_llama_models']:
-                    default_index = recent_options.index(current_model)
-
-                recent_model = st.selectbox(
-                    "Recent Models",
-                    recent_options,
-                    index=default_index,
-                    key="sidebar_recent_models_select"
-                )
-                if recent_model != "[Select a recent model]":
-                    st.session_state['llama_cpp_model_path'] = recent_model
-
-            # File browser interface - Native OS Dialog (Primary Method)
-            if TKINTER_AVAILABLE:
-                st.markdown("**Select Model File:**")
-
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    if st.button("🗂️ Browse for GGUF Model...", key="sidebar_browse_file", use_container_width=True):
-                        # Get initial directory from current path or use home
-                        initial_dir = None
-                        if st.session_state['llama_cpp_model_path']:
-                            current_path = Path(st.session_state['llama_cpp_model_path'])
-                            if current_path.exists():
-                                initial_dir = str(current_path.parent)
-
-                        selected_file = select_file_with_tkinter(initial_dir=initial_dir)
-                        if selected_file:
-                            st.session_state['llama_cpp_model_path'] = selected_file
-                            # Add to recent models
-                            if 'recent_llama_models' not in st.session_state:
-                                st.session_state['recent_llama_models'] = []
-                            if selected_file not in st.session_state['recent_llama_models']:
-                                st.session_state['recent_llama_models'].insert(0, selected_file)
-                                st.session_state['recent_llama_models'] = st.session_state['recent_llama_models'][:5]
-                            st.rerun()
-
-                with col2:
-                    if st.button("📁 Browse Folder", key="sidebar_browse_folder", use_container_width=True):
-                        selected_folder = select_folder_with_tkinter()
-                        if selected_folder:
-                            # Find GGUF files in selected folder
-                            gguf_files = list(Path(selected_folder).glob("*.gguf"))
-                            if gguf_files:
-                                st.session_state['_browse_dir'] = selected_folder
-                                st.session_state['_browse_files'] = [str(f) for f in sorted(gguf_files)]
-                            else:
-                                st.warning(f"No GGUF files found in {selected_folder}")
-
-                # Show browsed files from folder selection
-                if '_browse_files' in st.session_state and st.session_state['_browse_files']:
-                    st.caption(f"Found {len(st.session_state['_browse_files'])} models in {Path(st.session_state['_browse_dir']).name}:")
-
-                    selected_file = st.selectbox(
-                        "Select model:",
-                        ["[Choose a model]"] + st.session_state['_browse_files'],
-                        key="sidebar_folder_file_select"
-                    )
-
-                    if selected_file != "[Choose a model]":
-                        st.session_state['llama_cpp_model_path'] = selected_file
-                        if 'recent_llama_models' not in st.session_state:
-                            st.session_state['recent_llama_models'] = []
-                        if selected_file not in st.session_state['recent_llama_models']:
-                            st.session_state['recent_llama_models'].insert(0, selected_file)
-                            st.session_state['recent_llama_models'] = st.session_state['recent_llama_models'][:5]
-
-            # Fallback: File browser is intentionally disabled to avoid exposing full directory trees.
-            elif FILE_BROWSER_AVAILABLE:
-                st.info(
-                    "📦 File browser disabled to avoid exposing your filesystem. "
-                    "Use the quick scanner below or enter a path manually."
-                )
-
-            # Fallback: Manual path entry only
-            else:
-                st.warning("⚠️ No file browser available. Install tkinter for native dialogs.")
-
-            # Quick scan for GGUF files when native picker is unavailable or disabled
-            if not TKINTER_AVAILABLE:
-                st.markdown("**Quick Model Picker (common locations):**")
-                st.caption("Scans ~/models, ~/Downloads, and any paths in $LLM_MODEL_DIRS for .gguf files.")
-
-                if "quick_llama_models" not in st.session_state:
-                    st.session_state["quick_llama_models"] = []
-
-                if st.button("🔍 Scan for models", key="sidebar_scan_models", use_container_width=True):
-                    st.session_state["quick_llama_models"] = _find_local_models()
-                    if not st.session_state["quick_llama_models"]:
-                        st.info("No GGUF models found in common locations. Enter a path manually.")
-
-                if st.session_state.get("quick_llama_models"):
-                    discovered = st.selectbox(
-                        "Select discovered model",
-                        ["[Choose a model]"] + st.session_state["quick_llama_models"],
-                        key="sidebar_quick_model_select",
-                    )
-                    if discovered != "[Choose a model]":
-                        st.session_state["llama_cpp_model_path"] = discovered
-
-            # Manual path input (always available)
-            with st.expander("✏️ Or Enter Path Manually"):
-                model_path = st.text_input(
-                    "Full model path:",
-                    value=st.session_state['llama_cpp_model_path'],
-                    key="sidebar_llama_model_path_input",
-                    help="Full path to your GGUF model file",
-                    placeholder="e.g., /Users/you/models/model.gguf"
-                )
-
-                # Update state from text input
-                if model_path != st.session_state['llama_cpp_model_path']:
-                    st.session_state['llama_cpp_model_path'] = model_path
-
-            # Save valid paths to recent models
-            final_model_path = st.session_state['llama_cpp_model_path']
-            if final_model_path and Path(final_model_path).exists():
-                if 'recent_llama_models' not in st.session_state:
-                    st.session_state['recent_llama_models'] = []
-                if final_model_path not in st.session_state['recent_llama_models']:
-                    st.session_state['recent_llama_models'].insert(0, final_model_path)
-                    st.session_state['recent_llama_models'] = st.session_state['recent_llama_models'][:5]
-
-            # Performance settings
-            with st.expander("⚙️ Performance Settings"):
-                n_threads = st.number_input("CPU Threads", min_value=1, max_value=16, value=4, key="sidebar_n_threads")
-                n_gpu_layers = st.number_input("GPU Layers", min_value=0, max_value=100, value=0, key="sidebar_n_gpu_layers")
-
-            st.session_state['llm_backend'] = 'llama_cpp'
-            st.session_state['llm_backend_config'] = {
-                'model_path': final_model_path,
-                'n_threads': n_threads,
-                'n_gpu_layers': n_gpu_layers
-            }
-
-            # Status indicator
-            if final_model_path and Path(final_model_path).exists():
-                file_size_gb = Path(final_model_path).stat().st_size / (1024**3)
-                st.success(f"✅ {Path(final_model_path).name[:30]} ({file_size_gb:.1f}GB)")
-            elif final_model_path:
-                st.error(f"⚠️ Model not found: {final_model_path}")
-            else:
-                st.warning("⚠️ No model selected")
-
-        elif llm_backend == "llama_server":
-            st.markdown("**Remote llama.cpp server:**")
-            server_url = st.text_input(
-                "Server URL",
-                value=st.session_state.get("llama_server_url", "http://localhost:8080"),
-                key="sidebar_llama_server_url",
-                help="URL where llama-server is running (e.g., http://localhost:8080)",
-            )
-            server_model = st.text_input(
-                "Server Model Name",
-                value=st.session_state.get("llama_server_model", "local"),
-                key="sidebar_llama_server_model",
-                help="Model name configured in the server (default: local)",
-            )
-
-            st.session_state["llama_server_url"] = server_url
-            st.session_state["llama_server_model"] = server_model
-
-            st.session_state['llm_backend'] = 'llama_server'
-            st.session_state['llm_backend_config'] = {
-                'server_url': server_url.rstrip("/"),
-                'server_model': server_model,
-            }
-
-            st.info(f"Using llama-server at {server_url} with model '{server_model}'")
-
-        elif llm_backend == "ollama":
-            model_options = {
-                "Qwen3": "qwen3:latest",
-                "Mistral": "mistral:latest",
-                "Llama 3": "llama3:latest"
-            }
-            selected_model_label = st.selectbox(
-                "Ollama Model",
-                list(model_options.keys()),
-                key="sidebar_ollama_model"
-            )
-            selected_model = model_options[selected_model_label]
-
-            st.session_state['llm_backend'] = 'ollama'
-            st.session_state['llm_backend_config'] = {
-                'model_name': selected_model
-            }
-            st.success(f"✅ {selected_model}")
-
-        else:  # None
-            st.info("AI assistance disabled. Core analysis still works!")
-            st.session_state['llm_backend'] = 'none'
+        # Fixed llama.cpp server configuration (no user controls)
+        st.session_state["llm_backend"] = "llama_server"
+        st.session_state["llama_server_url"] = "http://localhost:8080"
+        st.session_state["llama_server_model"] = "local"
+        st.session_state["llm_backend_config"] = {
+            "server_url": st.session_state["llama_server_url"],
+            "server_model": st.session_state["llama_server_model"],
+        }
+        st.caption("Using llama.cpp server at http://localhost:8080 (model 'local').")
 
 
 def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
@@ -413,43 +265,17 @@ def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
         st.markdown("---")
         st.subheader("💬 Ask AI")
 
-        # Optional: capture a page snapshot for VLMs
-        include_snapshot = st.checkbox("📸 Include page snapshot", value=False, key="sidebar_include_snapshot")
-        if include_snapshot:
-            # Hidden field to hold base64 snapshot
-            snapshot_holder = st.text_input(
-                "page_snapshot_b64",
-                key="page_snapshot_b64",
-                label_visibility="collapsed",
-                help="Automatically filled with a page snapshot",
-            )
-            # JS-based capture using html2canvas (best-effort; requires network access to CDN)
-            components.html(
-                """
-                <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-                <script>
-                (function() {
-                  const doCapture = () => {
-                    const input = window.parent.document.querySelector('input[aria-label="page_snapshot_b64"]');
-                    if (!input || typeof html2canvas === 'undefined') return;
-                    html2canvas(window.parent.document.body, {scale: 0.5}).then(canvas => {
-                      const dataUrl = canvas.toDataURL('image/png').replace(/^data:image\\/png;base64,/, '');
-                      input.value = dataUrl;
-                      const event = new Event('input', { bubbles: true });
-                      input.dispatchEvent(event);
-                    }).catch(() => {});
-                  };
-                  // Throttle capture to avoid excessive calls
-                  if (!window.__sta_snapshot_cooldown) {
-                    window.__sta_snapshot_cooldown = true;
-                    doCapture();
-                    setTimeout(() => { window.__sta_snapshot_cooldown = false; }, 3000);
-                  }
-                })();
-                </script>
-                """,
-                height=0,
-            )
+        # Hidden snapshot field (only populated on demand when vision prompt is pending)
+        st.markdown(
+            "<style>[aria-label='page_snapshot_b64']{display:none !important;}</style>",
+            unsafe_allow_html=True,
+        )
+        st.text_input(
+            "page_snapshot_b64",
+            key="page_snapshot_b64",
+            label_visibility="collapsed",
+            help="Automatically filled with a page snapshot for vision models",
+        )
 
         # Initialize chat history
         if 'sidebar_chat_history' not in st.session_state:
@@ -464,6 +290,70 @@ def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
                 with st.chat_message(role):
                     st.markdown(message)
 
+        # Gather analysis context for prompts
+        analysis_context = collect_comprehensive_analysis_data() if CHAT_AVAILABLE else {}
+        pending_vision_prompt = st.session_state.get("vision_pending_prompt")
+        snapshot = st.session_state.get("page_snapshot_b64")
+
+        # If a vision prompt is waiting for a snapshot, trigger capture and pause processing
+        if pending_vision_prompt and not snapshot:
+            components.html(
+                """
+                <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+                <script>
+                (function() {
+                  const input = window.parent.document.querySelector('input[aria-label="page_snapshot_b64"]');
+                  if (!input || typeof html2canvas === 'undefined') return;
+                  html2canvas(window.parent.document.body, {
+                    scale: 0.5,
+                    logging: false,
+                    useCORS: true,
+                    ignoreElements: (el) => el.tagName && el.tagName.toLowerCase() === 'canvas',
+                  }).then(canvas => {
+                    try {
+                      const dataUrl = canvas.toDataURL('image/png').replace(/^data:image\\/png;base64,/, '');
+                      input.value = dataUrl;
+                      const event = new Event('input', { bubbles: true });
+                      input.dispatchEvent(event);
+                    } catch (e) {}
+                  }).catch(() => {});
+                })();
+                </script>
+                """,
+                height=0,
+            )
+            st.info("📸 Capturing page snapshot for vision model...")
+            st.stop()
+
+        # If we have a pending vision prompt and a snapshot, send it now
+        if pending_vision_prompt and snapshot:
+            prompt = pending_vision_prompt
+            st.session_state.pop("vision_pending_prompt", None)
+            _stream_sidebar_response(prompt, include_snapshot=True)
+            st.rerun()
+
+        # Quick actions aligned with AI Insights tab
+        col_a, col_b = st.columns(2)
+        with col_a:
+            analyze_clicked = st.button(
+                "🧠 Analyze Journey",
+                key="sidebar_analyze_journey",
+                help="Run the same semantic journey analysis used in AI Insights",
+            )
+        with col_b:
+            deep_clicked = st.button(
+                "💡 Deep Insights",
+                key="sidebar_deep_insights",
+                help="Use AI Insights deep-dive angles for targeted guidance",
+            )
+
+        # Vision-powered explain button (uses llama.cpp server + page snapshot)
+        vision_clicked = st.button(
+            "🖼️ Explain with Vision-Model",
+            key="sidebar_vision_explain",
+            help="Send the current page snapshot to a vision-capable llama.cpp server model (e.g., Qwen3-VL)",
+        )
+
         # Chat input
         user_question = st.chat_input(
             "Ask about this analysis...",
@@ -471,55 +361,33 @@ def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
         )
 
         if user_question:
-            # Add user message
             st.session_state['sidebar_chat_history'].append(("user", user_question))
+            prompt = _build_sidebar_prompt(
+                base_context=analysis_context,
+                user_question=user_question,
+                deep=False,
+            )
+            _stream_sidebar_response(prompt, include_snapshot=False)
+            st.rerun()
 
-            # Get LLM response
-            backend = st.session_state.get('llm_backend', 'none')
-            backend_config = st.session_state.get('llm_backend_config', {})
-            if include_snapshot:
-                snapshot = st.session_state.get("page_snapshot_b64")
-                if snapshot:
-                    backend_config = {**backend_config, "image_base64": snapshot}
-                else:
-                    st.info("📸 Snapshot not available yet; sending text-only this time.")
+        if analyze_clicked:
+            prompt = _build_sidebar_prompt(base_context=analysis_context, user_question=None, deep=False)
+            _stream_sidebar_response(prompt, include_snapshot=False)
+            st.rerun()
 
-            if backend == 'none':
-                response = "AI assistance is disabled. Please select an LLM backend above to enable chat."
-                st.session_state['sidebar_chat_history'].append(("assistant", response))
-            elif not CHAT_AVAILABLE or stream_unified_response is None:
-                response = "Chat components are unavailable in this environment."
-                st.session_state['sidebar_chat_history'].append(("assistant", response))
-            elif backend == "llama_server" and not backend_config.get("server_url"):
-                response = "Please provide the llama-server URL (e.g., http://localhost:8080)."
-                st.session_state['sidebar_chat_history'].append(("assistant", response))
-            else:
-                # Create context-aware prompt
-                context_info = []
-                if context and context.get('has_data'):
-                    context_info.append(f"Dataset: {context.get('data_summary', 'No data loaded')}")
+        if deep_clicked:
+            prompt = _build_sidebar_prompt(base_context=analysis_context, user_question=None, deep=True)
+            _stream_sidebar_response(prompt, include_snapshot=False)
+            st.rerun()
 
-                if context_info:
-                    prompt = f"Context: {' | '.join(context_info)}\n\nUser Question: {user_question}\n\nProvide a helpful answer based on semantic tensor analysis principles."
-                else:
-                    prompt = f"User Question: {user_question}\n\nNote: No dataset is currently loaded. Provide general guidance about semantic tensor analysis."
-
-                # Stream response
-                with st.chat_message("assistant"):
-                    placeholder = st.empty()
-                    response = ""
-
-                    try:
-                        for token in stream_unified_response(prompt, backend=backend, **backend_config):
-                            response += token
-                            placeholder.markdown(response)
-
-                        st.session_state['sidebar_chat_history'].append(("assistant", response))
-                    except Exception as e:
-                        error_msg = f"Error: {e}"
-                        placeholder.error(error_msg)
-                        st.session_state['sidebar_chat_history'].append(("assistant", error_msg))
-
+        if vision_clicked:
+            prompt = _build_sidebar_prompt(
+                base_context=analysis_context,
+                user_question="Explain this page and its key insights using the attached snapshot.",
+                deep=True,
+            )
+            st.session_state["vision_pending_prompt"] = prompt
+            st.session_state["page_snapshot_b64"] = ""
             st.rerun()
 
         # Clear chat button

@@ -32,7 +32,7 @@ class LargeChatProcessor:
     
     def __init__(self, config: ProcessingConfig):
         self.config = config
-        self.analyzer = ChatSemanticAnalyzer()
+        self.analyzer = ChatSemanticAnalyzer(max_user_messages=config.max_messages)
     
     def estimate_file_size(self, file_path: str) -> dict:
         """Estimate processing requirements for a file."""

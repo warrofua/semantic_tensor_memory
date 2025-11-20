@@ -90,6 +90,7 @@ def build_app(*, include_ai_insights: bool = True) -> AppComponents:
         "dimensionality": tabs_module.render_dimensionality_tab,
         "concepts": tabs_module.render_enhanced_concept_analysis_tab,
         "explain": tabs_module.render_explainability_dashboard,
+        "temporal": tabs_module.render_temporal_analysis_tab,
     }
 
     if include_ai_insights:
@@ -146,6 +147,7 @@ def main() -> None:
         "🌊 Evolution",
         "🔍 Patterns",
         "📐 Dimensionality",
+        "⏱️ Temporal",
         "🧠 Concepts",
         "💡 Explain",
         "🤖 AI Insights",
@@ -159,6 +161,7 @@ def main() -> None:
             "evolution",
             "patterns",
             "dimensionality",
+            "temporal",
             "concepts",
             "explain",
             "ai_insights",

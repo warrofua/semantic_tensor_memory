@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Universal Multimodal STM Live Demo
+Semantic Tensor Analysis Live Demo
 
-This script demonstrates the revolutionary Universal Multimodal Semantic Tensor Memory
-system, showing how it preserves STM's core innovation while enabling multimodal intelligence.
+This script demonstrates the Semantic Tensor Analysis system, showing how it preserves STM's
+core innovation while enabling multimodal intelligence.
 """
 
 import sys
@@ -26,7 +26,7 @@ console = Console()
 def demo_header():
     """Display the demo header."""
     console.print(Panel.fit(
-        "[bold cyan]🌐 Universal Multimodal Semantic Tensor Memory[/bold cyan]\n" +
+        "[bold cyan]🌐 Semantic Tensor Analysis[/bold cyan]\n" +
         "[dim]Transformation from text-only to universal multimodal architecture[/dim]",
         border_style="cyan"
     ))
@@ -260,7 +260,7 @@ def main():
             "✅ Cross-modal analysis working\n" +
             "✅ Backward compatibility preserved\n" +
             "✅ Architecture ready for multimodal future\n\n" +
-            "[dim]The Universal Multimodal STM successfully preserves STM's core innovation\n" +
+            "[dim]Semantic Tensor Analysis successfully preserves STM's core innovation\n" +
             "while enabling unprecedented multimodal semantic memory capabilities.[/dim]",
             border_style="green"
         ))

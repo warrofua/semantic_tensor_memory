@@ -11,6 +11,7 @@ __all__ = [
     "render_explainability_dashboard",
     "render_overview_dashboard",
     "render_pattern_analysis_tab",
+    "render_temporal_analysis_tab",
 ]
 
 
@@ -46,5 +47,11 @@ def render_enhanced_concept_analysis_tab(*args: Any, **kwargs: Any) -> Any:
 
 def render_explainability_dashboard(*args: Any, **kwargs: Any) -> Any:
     from .explain import render_explainability_dashboard as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def render_temporal_analysis_tab(*args: Any, **kwargs: Any) -> Any:
+    from .temporal import render_temporal_analysis_tab as _impl
 
     return _impl(*args, **kwargs)
