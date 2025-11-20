@@ -20,6 +20,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from sklearn.decomposition import PCA
+from semantic_tensor_analysis.analytics.tensor_batching import pad_and_stack, flatten_with_mask
+from semantic_tensor_analysis.utils.tensors import to_cpu_numpy
 
 
 def check_tensor_health(tensor: torch.Tensor, name: str = "tensor") -> bool:
@@ -52,9 +54,8 @@ def prepare_for_pca(tensors: Sequence[torch.Tensor]) -> Tuple[np.ndarray, np.nda
     if not tensors:
         raise ValueError("No tensors provided to prepare_for_pca")
 
-    flat = torch.cat(tensors)
-    session_ids = np.repeat(np.arange(len(tensors)), [t.shape[0] for t in tensors])
-    token_ids = np.concatenate([np.arange(t.shape[0]) for t in tensors])
+    batch, mask = pad_and_stack(list(tensors))
+    flat, session_ids, token_ids = flatten_with_mask(batch, mask)
 
     nan_mask = torch.isnan(flat).any(dim=1)
     inf_mask = torch.isinf(flat).any(dim=1)
@@ -84,11 +85,7 @@ def prepare_for_pca(tensors: Sequence[torch.Tensor]) -> Tuple[np.ndarray, np.nda
         print("[red]Error:[/red] Still found NaN/Inf values after normalization")
         flat = torch.nan_to_num(flat, nan=0.0, posinf=0.0, neginf=0.0)
 
-    return (
-        flat.detach().cpu().numpy(),
-        session_ids.detach().cpu().numpy(),
-        token_ids.detach().cpu().numpy(),
-    )
+    return to_cpu_numpy(flat), session_ids, token_ids
 
 
 def interpret_pca(

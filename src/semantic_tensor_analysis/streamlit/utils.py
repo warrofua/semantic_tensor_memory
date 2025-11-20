@@ -10,6 +10,7 @@ import torch
 import numpy as np
 from semantic_tensor_analysis.memory import get_text_embedder
 from semantic_tensor_analysis.memory.store import append
+from semantic_tensor_analysis.utils.tensors import to_cpu_numpy
 import re
 from collections import Counter
 from sklearn.decomposition import PCA, IncrementalPCA
@@ -187,7 +188,7 @@ def robust_pca_pipeline(memory_slice, meta_slice, n_components=2, return_scaler=
         # Step 1: Prepare data with pad + mask and flatten
         batch_tensor, mask_tensor = pad_and_stack(memory_slice)
         flat_t, session_ids_t, token_ids_t = flatten_with_mask(batch_tensor, mask_tensor)
-        flat = flat_t.numpy()
+        flat = to_cpu_numpy(flat_t)
         session_ids = session_ids_t
         token_ids = token_ids_t
 
@@ -550,7 +551,7 @@ def collect_comprehensive_analysis_data():
             # Calculate session embeddings
             session_embeddings = []
             for tensor in st.session_state.memory:
-                session_emb = tensor.mean(0).numpy()
+                session_emb = to_cpu_numpy(tensor.mean(0))
                 session_embeddings.append(session_emb)
             session_embeddings = np.array(session_embeddings)
             
@@ -582,7 +583,7 @@ def collect_comprehensive_analysis_data():
             means = torch.stack([t.mean(0) for t in st.session_state.memory])
             means_norm = torch.nn.functional.normalize(means, p=2, dim=1)
             sims = torch.mm(means_norm, means_norm.t())
-            dist = 1 - sims.numpy()
+            dist = 1 - to_cpu_numpy(sims)
             
             analysis_data['heatmap_analysis'] = {
                 'avg_distance': float(np.mean(dist[np.triu_indices_from(dist, k=1)])),

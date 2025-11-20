@@ -21,6 +21,7 @@ from datetime import datetime
 import io
 import base64
 import time
+from semantic_tensor_analysis.utils.tensors import to_cpu_numpy
 
 
 def plot_drift_plotly(drifts, token_counts):
@@ -73,7 +74,7 @@ def plot_heatmap_plotly(tensors):
     # Compute cosine similarity matrix
     means_norm = torch.nn.functional.normalize(means, p=2, dim=1) if means.numel() else means
     sims = torch.mm(means_norm, means_norm.t()) if means.numel() else torch.zeros(0, 0)
-    dist = (1 - sims).numpy() if sims.numel() else np.zeros((0, 0))
+    dist = 1 - to_cpu_numpy(sims) if sims.numel() else np.zeros((0, 0))
 
     # Get token counts for annotation
     token_counts = [t.shape[0] for t in tensors]
@@ -1251,7 +1252,7 @@ def plot_enhanced_ridgeline_altair(memory, meta, show_trends=True, highlight_cha
         session_metadata = []
         
         for idx, tensor in enumerate(memory):
-            session_emb = tensor.mean(0).numpy()
+            session_emb = to_cpu_numpy(tensor.mean(0))
             session_embeddings.append(session_emb)
             session_text = meta[idx].get('text', f'Session {idx+1}')
             session_metadata.append({
@@ -1629,7 +1630,7 @@ def plot_ridgeline_plotly(memory, meta, show_trends=True, highlight_changes=True
         session_metadata = []
         
         for idx, tensor in enumerate(memory):
-            session_emb = tensor.mean(0).numpy()
+            session_emb = to_cpu_numpy(tensor.mean(0))
             session_embeddings.append(session_emb)
             session_text = meta[idx].get('text', f'Session {idx+1}')
             session_metadata.append({

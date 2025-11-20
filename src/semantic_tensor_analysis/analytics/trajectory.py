@@ -12,6 +12,7 @@ import altair as alt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from semantic_tensor_analysis.streamlit.utils import generate_dynamic_axis_labels
+from semantic_tensor_analysis.utils.tensors import to_cpu_numpy
 
 
 def calculate_semantic_trajectory_data(memory, meta):
@@ -21,7 +22,7 @@ def calculate_semantic_trajectory_data(memory, meta):
     session_metadata = []
     
     for idx, tensor in enumerate(memory):
-        session_emb = tensor.mean(0).detach().cpu().numpy()  # Mean embedding for the session
+        session_emb = to_cpu_numpy(tensor.mean(0))  # Mean embedding for the session
         session_embeddings.append(session_emb)
         session_text = meta[idx].get('text', f'Session {idx+1}')
         session_metadata.append({

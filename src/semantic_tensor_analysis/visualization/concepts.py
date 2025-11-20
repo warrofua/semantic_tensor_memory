@@ -19,9 +19,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import torch
 from plotly.subplots import make_subplots
-from sklearn.cluster import KMeans
-from sklearn.metrics.pairwise import cosine_similarity
-
+from semantic_tensor_analysis.analytics.concept.concept_analysis import (
+    ConceptAnalyzer as CoreConceptAnalyzer,
+    ConceptCluster,
+    ConceptDriftPattern,
+    ConceptEvolution,
+)
 from memory.universal_core import Modality, UniversalMemoryStore
 
 
@@ -62,12 +65,25 @@ class ConceptEvolution:
 
 
 class ConceptAnalyzer:
-    """Concept-level analytics driven by the Universal STM memory store."""
+    """Thin wrapper around the analytics ConceptAnalyzer to prevent divergence."""
 
     def __init__(self, store: UniversalMemoryStore):
+        self._core = CoreConceptAnalyzer(store)
         self.store = store
         self.sequence_embeddings = None
         self.session_metadata = None
+        # Delegate heavy lifting to the shared analytics implementation
+        self.analyze_concept_clusters = self._core.analyze_concept_clusters
+        self.analyze_concept_drift_patterns = self._core.analyze_concept_drift_patterns
+        self.analyze_concept_velocity = self._core.analyze_concept_velocity
+        self.identify_major_concept_shifts = self._core.identify_major_concept_shifts
+        self._extract_sequence_data = self._core._extract_sequence_data
+        self._extract_cluster_themes = self._core._extract_cluster_themes
+        self._extract_shift_keywords = self._core._extract_shift_keywords
+        self._analyze_concept_persistence = self._core._analyze_concept_persistence
+
+    def __getattr__(self, name):
+        return getattr(self._core, name)
 
     def _extract_sequence_data(
         self, modality: Optional[Modality] = None

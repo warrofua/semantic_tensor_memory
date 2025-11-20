@@ -17,6 +17,7 @@ from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 
 from semantic_tensor_analysis.app.temporal_resolution_manager import TemporalResolution
+from semantic_tensor_analysis.utils.tensors import to_cpu_numpy
 
 
 def create_temporal_semantic_flow(temporal_manager, resolution: TemporalResolution = TemporalResolution.TURN):
@@ -34,7 +35,7 @@ def create_temporal_semantic_flow(temporal_manager, resolution: TemporalResoluti
     # Apply PCA for visualization
     from sklearn.decomposition import PCA
     pca = PCA(n_components=2)
-    coords_2d = pca.fit_transform(embeddings.detach().cpu().numpy())
+    coords_2d = pca.fit_transform(to_cpu_numpy(embeddings))
     
     # Create timeline data
     timeline_data = []
