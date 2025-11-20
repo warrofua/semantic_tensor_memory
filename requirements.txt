@@ -1,2 +1,0 @@
-# Dependencies are now managed via pyproject.toml.
-# Install the project with: pip install -e .
