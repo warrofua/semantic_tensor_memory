@@ -622,6 +622,9 @@ def process_unified_sessions(session_data, filename, content_type):
             - **Memory**: {final_memory:.0f}MB final ({final_memory-start_memory:+.0f}MB change)
             - **Quality**: {processing_quality['successful_embeddings']/(valid_sessions+skipped_sessions):.1%} success rate
             """)
+            st.session_state["upload_success"] = True
+            if st.button("➡️ Go to analysis", type="primary"):
+                st.rerun()
             
             # Show processing strategy results
             if profile.processing_strategy != "full_processing":
@@ -648,6 +651,12 @@ def process_unified_sessions(session_data, filename, content_type):
 
 def render_upload_screen():
     """Render the unified upload interface."""
+    if st.session_state.get("upload_success") and len(st.session_state.get("memory", [])) > 0:
+        st.success("✅ Dataset loaded. Continue to analysis.")
+        if st.button("➡️ Go to analysis", type="primary"):
+            st.session_state.pop("upload_success", None)
+            st.rerun()
+
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0;">
         <h1>🌐 Universal Multimodal STM</h1>
@@ -732,9 +741,16 @@ def render_upload_screen():
 
 def render_simple_sidebar():
     """Render a clean, minimal sidebar."""
+    # Import sidebar chat module
+    try:
+        from semantic_tensor_analysis.app.sidebar_chat import render_llm_config_sidebar, render_sidebar_chat
+        SIDEBAR_CHAT_AVAILABLE = True
+    except ImportError:
+        SIDEBAR_CHAT_AVAILABLE = False
+
     with st.sidebar:
         st.image("semantic_tensor_art_logo.png", width=200)
-        
+
         # Dataset status (compact)
         dataset_info = st.session_state.get('dataset_info', {})
         if dataset_info.get('session_count', 0) > 0:
@@ -742,7 +758,7 @@ def render_simple_sidebar():
             session_count = dataset_info.get('session_count', 0)
             st.markdown(f"**📁 {filename}**")
             st.markdown(f"🔢 {session_count} sessions")
-            
+
             # Quick actions
             if st.button("🔄 New Dataset"):
                 st.session_state.memory = []
@@ -751,15 +767,27 @@ def render_simple_sidebar():
                 st.rerun()
         else:
             st.markdown("**No dataset loaded**")
-        
+
         st.markdown("---")
-        
+
         # Show preferred dimensionality method
         preferred_method = st.session_state.get('preferred_method')
         if preferred_method:
             st.markdown("**📐 Preferred Method:**")
             st.markdown(f"🎯 {preferred_method.upper()}")
             st.caption("Set in Dimensionality tab")
+
+    # Add LLM config and chat to sidebar
+    if SIDEBAR_CHAT_AVAILABLE:
+        render_llm_config_sidebar()
+
+        # Pass context about current tab
+        context = {
+            'current_tab': st.session_state.get('active_tab', 'Overview'),
+            'data_summary': f"{dataset_info.get('session_count', 0)} sessions loaded",
+            'has_data': dataset_info.get('session_count', 0) > 0
+        }
+        render_sidebar_chat(context)
 
 
 def render_overview_dashboard():
@@ -1112,12 +1140,18 @@ def render_pattern_analysis_tab():
         # Analysis type selector
         analysis_type = st.radio(
             "Choose analysis type:",
-            ["🌐 Holistic Semantic Analysis (REVOLUTIONARY!)", "🌊 Semantic Drift River (3D)", "📊 Ridgeline (Feature Evolution)", "🔥 Similarity Heatmap", "🎬 Animated Patterns"],
-            horizontal=True
+            [
+                "🌐 Holistic Semantic Analysis",
+                "🌊 Semantic Drift River (3D)",
+                "📊 Ridgeline (Feature Evolution)",
+                "🔥 Similarity Heatmap",
+                "🎬 Animated Patterns",
+            ],
+            horizontal=True,
         )
         
         if analysis_type.startswith("🌐"):
-            # Revolutionary Holistic Semantic Analysis
+            # Holistic Semantic Analysis
             render_holistic_semantic_analysis(st.session_state.memory, st.session_state.meta)
         
         elif analysis_type.startswith("🌊"):
@@ -1986,6 +2020,20 @@ def render_explainability_dashboard():
         
         if has_performance_data:
             performance = dataset_info['performance_metrics']
+            derived = False
+        else:
+            session_count = dataset_info.get('session_count', len(st.session_state.get('memory', [])))
+            processing_time = dataset_info.get('processing_time', 0) or 0
+            sessions_per_second = (session_count / processing_time) if processing_time else 0.0
+            performance = {
+                "sessions_per_second": sessions_per_second,
+                "memory_efficiency": float(session_count) if session_count else 0.0,
+                "success_rate": 1.0 if session_count else 0.0,
+                "estimated_quality": 0.5 if session_count else 0.0,
+            }
+            derived = True
+        
+        if performance['sessions_per_second'] or performance['success_rate']:
             
             # Create quality explanation
             quality_explanation = explainability_engine.explain_processing_quality(
@@ -2028,6 +2076,8 @@ def render_explainability_dashboard():
                 st.metric("Success Rate", f"{performance['success_rate']:.1%}")
                 st.metric("Memory Efficiency", f"{performance['memory_efficiency']:.1f}")
                 st.metric("Processing Speed", f"{performance['sessions_per_second']:.1f}/s")
+            if derived:
+                st.info("ℹ️ Showing inferred quality (no recorded processing metrics). Re-run processing for full assessment.")
         
         else:
             st.info("🔄 Process data to see quality assessment")

@@ -1018,9 +1018,9 @@ def render_holistic_semantic_analysis(memory: List[torch.Tensor], meta: List[Dic
         - **Temporal Resolution**: Per-session analysis
         - **3D Rendering**: Plotly with parametric surface generation
         """)
-    
+
     st.info("""
-    **🚀 Revolutionary Dynamic Semantic Analysis!**
+    **Dynamic Semantic Analysis**
     
     This advanced methodology provides comprehensive insights by:
     - 🔍 **Global Concept Extraction**: Find ALL concepts across entire dataset

@@ -3,16 +3,32 @@
 This module contains chat interface and LLM-powered analysis functions
 for providing behavioral insights and interactive explanations focused on
 semantic content rather than technical metrics.
+
+Supports multiple LLM backends:
+- llama.cpp (local GGUF models)
+- llama.cpp server (HTTP)
+- Ollama (local Ollama server)
 """
 
 import streamlit as st
 import requests
 import json
+from typing import Iterator, Optional
+from pathlib import Path
+
 from semantic_tensor_analysis.streamlit.utils import (
     add_chat_message,
     is_ollama_model_available,
     collect_comprehensive_analysis_data,
 )
+
+# Import llama.cpp support (optional)
+try:
+    from .unified_analyzer import UnifiedLLMAnalyzer, create_analyzer
+    from .llama_cpp_analyzer import is_llama_cpp_available, get_recommended_models
+    LLAMA_CPP_SUPPORT = True
+except ImportError:
+    LLAMA_CPP_SUPPORT = False
 
 
 def create_semantic_insights_prompt(analysis_data):
@@ -178,25 +194,91 @@ def stream_ollama_response(prompt_text, model_name):
         yield f"Error connecting to Ollama: {e}"
 
 
+def stream_unified_response(prompt_text: str, backend: str = "ollama", **kwargs) -> Iterator[str]:
+    """Stream response from unified LLM backend (llama.cpp or Ollama).
+
+    Args:
+        prompt_text: The prompt to send to the LLM
+        backend: Backend to use ("ollama", "llama_cpp", or "llama_server")
+        **kwargs: Additional arguments for the backend
+            For llama.cpp: model_path, n_ctx, n_threads, n_gpu_layers
+            For llama_server: server_url, server_model
+            For Ollama: model_name
+
+    Yields:
+        str: Response tokens from the LLM
+    """
+    if backend == "llama_cpp" and LLAMA_CPP_SUPPORT:
+        model_path = kwargs.get('model_path')
+        if not model_path:
+            yield "Error: llama.cpp model path not specified"
+            return
+
+        try:
+            analyzer = create_analyzer(
+                backend="llama_cpp",
+                llama_cpp_model_path=model_path,
+                llama_cpp_n_ctx=kwargs.get('n_ctx', 4096),
+                llama_cpp_n_threads=kwargs.get('n_threads', 4),
+                llama_cpp_n_gpu_layers=kwargs.get('n_gpu_layers', 0)
+            )
+            yield from analyzer.stream_response(prompt_text)
+        except Exception as e:
+            yield f"Error with llama.cpp: {e}"
+
+    elif backend == "llama_server":
+        server_url = kwargs.get("server_url", "http://localhost:8080")
+        server_model = kwargs.get("server_model", "local")
+        image_base64 = kwargs.get("image_base64")
+        try:
+            analyzer = create_analyzer(
+                backend="llama_server",
+                llama_server_url=server_url,
+                llama_server_model=server_model,
+            )
+            yield from analyzer.stream_response(
+                prompt_text, image_base64=image_base64
+            )
+        except Exception as e:
+            yield f"Error with llama-server: {e}"
+
+    elif backend == "ollama":
+        model_name = kwargs.get('model_name', 'qwen3:latest')
+        yield from stream_ollama_response(prompt_text, model_name)
+
+    else:
+        yield "Error: Invalid backend specified or llama.cpp not available"
+
+
 def render_chat_analysis_panel(context=None, tab_id=None):
     """Render chat analysis panel with content-focused LLM interaction."""
+
+    backend_status = st.session_state.get("llm_backend")
+    backend_config = st.session_state.get("llm_backend_config", {})
+
+    if not backend_status:
+        st.warning("Select an LLM backend in the sidebar to enable AI Insights.")
+        return
+
     # Model selection and buttons section
     col1, col2, col3, col4 = st.columns([1.5, 1, 1, 1])
-    
+
     with col1:
-        # AI Model selection dropdown
-        model_options = {
-            "Qwen3": "qwen3:latest",
-            "Mistral": "mistral:latest"
-        }
-        selected_model_label = st.selectbox(
-            "AI Model:",
-            list(model_options.keys()),
-            key=f"model_selection_{tab_id}" if tab_id else "model_selection",
-            help="Choose the AI model for analysis"
-        )
-        selected_model = model_options[selected_model_label]
-        st.session_state["selected_model"] = selected_model
+        # Show current backend status (mirrors sidebar)
+        if backend_status == 'llama_cpp':
+            model_path = st.session_state.get('llama_cpp_model_path', '')
+            if model_path and Path(model_path).exists():
+                model_name = Path(model_path).name
+                # Show file size for confirmation
+                file_size_gb = Path(model_path).stat().st_size / (1024**3)
+                st.caption(f"🤖 llama.cpp: {model_name[:35]}")
+                st.caption(f"📊 Size: {file_size_gb:.1f}GB | ✅ Ready")
+            else:
+                st.caption("🤖 llama.cpp: ⚠️ No model selected")
+        elif backend_status == "llama_server":
+            st.caption(f"🤖 llama-server: {backend_config.get('server_url', 'unset')}")
+        else:
+            st.caption(f"🤖 Ollama: {st.session_state.get('selected_model', 'qwen3:latest')}")
     
     chat_key = f"chat_history_{tab_id}" if tab_id else "chat_history"
     
@@ -243,28 +325,58 @@ def render_chat_analysis_panel(context=None, tab_id=None):
     
     # Process the prompt if one was generated
     if prompt and st.session_state.get(streaming_key, False):
-        if not is_ollama_model_available(selected_model):
-            st.warning(
-                f"The model '{selected_model}' is not available in your local Ollama. "
-                f"To download it, run this command in your terminal:\n\n"
-                f"```sh\nollama pull {selected_model}\n```"
-            )
-            st.session_state[streaming_key] = False
-            return
-        
+        backend = backend_status
+        backend_config = dict(backend_config)
+
+        # Validation for Ollama
+        if backend == 'ollama':
+            selected_model = backend_config.get('model_name', 'qwen3:latest')
+            if not is_ollama_model_available(selected_model):
+                st.warning(
+                    f"The model '{selected_model}' is not available in your local Ollama. "
+                    f"To download it, run this command in your terminal:\n\n"
+                    f"```sh\nollama pull {selected_model}\n```"
+                )
+                st.session_state[streaming_key] = False
+                return
+
+        # Validation for llama.cpp
+        elif backend == 'llama_cpp':
+            model_path = backend_config.get('model_path', '')
+            if not model_path or not Path(model_path).exists():
+                st.warning(
+                    "Please specify a valid path to a GGUF model file in the configuration above."
+                )
+                st.session_state[streaming_key] = False
+                return
+
+        # Validation for llama.cpp server
+        elif backend == "llama_server":
+            server_url = backend_config.get("server_url", "")
+            if not server_url:
+                st.warning("Please provide the llama-server URL (e.g., http://localhost:8080).")
+                st.session_state[streaming_key] = False
+                return
+
         with st.chat_message("assistant"):
             placeholder = st.empty()
             streamed = ""
-            for token in stream_ollama_response(prompt, selected_model):
-                if not st.session_state.get(streaming_key, False):
-                    break
-                streamed += token
-                placeholder.markdown(streamed)
-            
-            # Finalize the response
-            st.session_state[chat_key].append(("assistant", streamed))
-            add_chat_message("assistant", streamed)
-            st.session_state[streaming_key] = False
+            try:
+                for token in stream_unified_response(prompt, backend=backend, **backend_config):
+                    if not st.session_state.get(streaming_key, False):
+                        break
+                    streamed += token
+                    placeholder.markdown(streamed)
+
+                # Finalize the response
+                st.session_state[chat_key].append(("assistant", streamed))
+                add_chat_message("assistant", streamed)
+            except Exception as e:
+                error_msg = f"Error during LLM inference: {e}"
+                st.error(error_msg)
+                st.session_state[chat_key].append(("assistant", error_msg))
+            finally:
+                st.session_state[streaming_key] = False
     
     # User input
     user_input = st.chat_input("Ask about your semantic journey, growth patterns, or next steps...", key=f"chat_input_{chat_key}")

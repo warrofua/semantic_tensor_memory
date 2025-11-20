@@ -1069,7 +1069,7 @@ def create_liminal_tunnel_visualization(memory, meta, tunnel_segments=25, tunnel
                             n_components=3, 
                             random_state=42, 
                             perplexity=min(5, len(tsne_data)//3),  # Much smaller perplexity
-                            n_iter=250,  # Reduced iterations
+                            max_iter=250,  # Reduced iterations
                             learning_rate=500,  # Faster learning
                             early_exaggeration=4  # Faster convergence
                         )

@@ -153,7 +153,7 @@ def enhanced_tsne_analysis(memory_slice, meta_slice, n_components=2, perplexity=
                 n_components=n_components,
                 perplexity=optimal_perplexity,
                 learning_rate=learning_rate,
-                n_iter=1000,
+                max_iter=1000,
                 random_state=42,
                 metric='cosine',
                 init='pca'  # Better initialization
@@ -176,7 +176,7 @@ def enhanced_tsne_analysis(memory_slice, meta_slice, n_components=2, perplexity=
             'parameters': {
                 'perplexity': optimal_perplexity,
                 'learning_rate': learning_rate,
-                'n_iter': reducer.n_iter
+                'n_iter': getattr(reducer, "n_iter_", 1000)
             }
         }
         

@@ -27,7 +27,7 @@ def demo_header():
     """Display the demo header."""
     console.print(Panel.fit(
         "[bold cyan]🌐 Universal Multimodal Semantic Tensor Memory[/bold cyan]\n" +
-        "[dim]Revolutionary transformation from text-only to universal multimodal architecture[/dim]",
+        "[dim]Transformation from text-only to universal multimodal architecture[/dim]",
         border_style="cyan"
     ))
 

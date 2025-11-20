@@ -1021,7 +1021,7 @@ def render_holistic_semantic_analysis(memory: List[torch.Tensor], meta: List[Dic
         """)
     
     st.info("""
-    **🚀 Revolutionary Dynamic Semantic Analysis!**
+    **Dynamic Semantic Analysis**
     
     This advanced methodology provides comprehensive insights by:
     - 🔍 **Global Concept Extraction**: Find ALL concepts across entire dataset

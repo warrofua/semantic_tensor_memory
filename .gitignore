@@ -38,6 +38,7 @@ test_conversation_chatgpt.json
 *.pkl
 data/universal/session_*.pkl
 data/universal/*.pkl
+data/universal/
 
 # System files
 .DS_Store

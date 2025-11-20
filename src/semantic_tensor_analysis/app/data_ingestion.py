@@ -375,6 +375,9 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
         - **Quality**: {processing_quality['successful_embeddings']/(valid_sessions+skipped_sessions):.1%} success rate
         """
         )
+        st.session_state["upload_success"] = True
+        if st.button("➡️ Go to analysis", type="primary"):
+            st.rerun()
 
         if profile.processing_strategy != "full_processing":
             st.info(
@@ -404,6 +407,13 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
 
 def render_upload_screen() -> None:
     """Render the unified upload interface."""
+    # If a dataset was just loaded, offer a quick way back to the app surface
+    if st.session_state.get("upload_success") and len(st.session_state.get("memory", [])) > 0:
+        st.success("✅ Dataset loaded. Continue to analysis.")
+        if st.button("➡️ Go to analysis", type="primary"):
+            st.session_state.pop("upload_success", None)
+            st.rerun()
+
     st.markdown(
         """
     <div style="text-align: center; padding: 2rem 0;">

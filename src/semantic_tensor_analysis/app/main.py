@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Callable, Dict, Optional
 
 try:
+    _skip_streamlit = bool(
+        os.environ.get("STA_SKIP_STREAMLIT")
+        or os.environ.get("PYTEST_CURRENT_TEST")
+    )
+    if _skip_streamlit:
+        raise ModuleNotFoundError("Streamlit skipped in test mode")
     import streamlit as st
 except ModuleNotFoundError:  # pragma: no cover - exercised in minimal test envs
     st = None  # type: ignore[assignment]
@@ -163,4 +170,3 @@ def main() -> None:
 
 
 __all__ = ["main", "build_app"]
-

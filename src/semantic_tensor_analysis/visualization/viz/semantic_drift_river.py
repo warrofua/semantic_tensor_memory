@@ -1,8 +1,7 @@
-"""semantic_tensor_analysis.visualization.river
-=============================================
+"""Semantic drift river visualization helpers.
 
-Specialised helpers for the "semantic drift river" visualisation, kept separate
-from the broader holistic analysis module so the intent of each renderer is
+This module supersedes the legacy `visualization.river`; keep imports pointed
+here for the maintained implementation.
 clear and discoverable.
 """
 
@@ -914,7 +913,7 @@ def render_semantic_drift_river_analysis(memory: List[torch.Tensor], meta: List[
     st.subheader("🌊 3D Semantic Drift River - Flowing Through Conceptual Space")
     
     st.info("""
-    **🚀 Revolutionary 3D Semantic River Visualization!**
+    **3D Semantic River Visualization**
     
     Experience semantic evolution as a stunning 3D flowing river system:
     - 📈 **Sharp trajectory lines** = precise semantic path through time
@@ -1099,7 +1098,7 @@ def render_semantic_drift_river_analysis(memory: List[torch.Tensor], meta: List[
     # Interpretation guide
     with st.expander("🎓 How to Interpret the 3D Semantic Drift River"):
         st.markdown("""
-        **🌊 Revolutionary 3D SDR Analysis Guide:**
+        **3D SDR Analysis Guide:**
         
         **3D Stream Characteristics:**
         - **🌊 Stream Flow**: Each concept flows as a 3D tube through time
