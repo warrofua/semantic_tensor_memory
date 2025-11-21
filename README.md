@@ -1,6 +1,7 @@
 # Semantic Tensor Analysis
+[![CI](https://github.com/semantic-tensor-analysis/semantic_tensor_analysis/actions/workflows/tests.yml/badge.svg)](https://github.com/semantic-tensor-analysis/semantic_tensor_analysis/actions/workflows/tests.yml)
 
-Semantic Tensor Analysis (STA) is a Python/Streamlit toolkit for examining how meaning shifts across ordered text sessions. It keeps token-level detail alongside session-level summaries so you can inspect drift without losing context.
+Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store and gives you temporal drift, trajectories, and token-level alignment—no custom infra required. It keeps token-level detail alongside session-level summaries so you can inspect drift without losing context.
 
 ## What is STA?
 
@@ -8,6 +9,11 @@ Semantic Tensor Analysis (STA) is a Python/Streamlit toolkit for examining how m
 - ✅ Drift metrics and clustering for ordered text sessions (CSV/JSON/TXT)
 - ✅ Visual explanations (PCA, heatmaps, trajectories) tailored to time-ordered data
 - ✅ Domain presets for clinical notes, learning progress, research logs, and conversations
+
+### Who is this for?
+- Researchers tracking concept drift over time
+- Clinicians / ABA teams monitoring progress across notes
+- Anyone with time-stamped text who wants more than cosine similarity
 
 ### Core approach: dual resolution
 
@@ -111,6 +117,15 @@ for note in therapy_notes:
 - `data/`: Demo CSVs (`ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`).
 - `tests/`: Test suite.
 - `pyproject.toml`: Package metadata/dependencies.
+
+---
+
+## 📘 Examples
+
+- `examples/aba_progress.ipynb`: Load ABA demo CSV → embed via API → quick PCA view.
+- `examples/finance_narrative.ipynb`: Embed narrative CSV → run concept clustering → inspect clusters.
+
+Open in Jupyter/VS Code and run locally; both use the STA API (no Streamlit).
 
 ---
 
