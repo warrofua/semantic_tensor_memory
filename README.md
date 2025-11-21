@@ -1,5 +1,5 @@
 # Semantic Tensor Analysis
-[![CI](https://github.com/semantic-tensor-analysis/semantic_tensor_analysis/actions/workflows/tests.yml/badge.svg)](https://github.com/semantic-tensor-analysis/semantic_tensor_analysis/actions/workflows/tests.yml)
+[![CI](https://github.com/warrofua/semantic-tensor-analysis/actions/workflows/tests.yml/badge.svg)](https://github.com/warrofua/semantic-tensor-analysis/actions/workflows/tests.yml)
 
 Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store and gives you temporal drift, trajectories, and token-level alignment—no custom infra required. It keeps token-level detail alongside session-level summaries so you can inspect drift without losing context.
 
