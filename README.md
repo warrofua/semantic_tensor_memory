@@ -189,6 +189,13 @@ STA uses **llama.cpp** as the default backend (sidebar auto-configured to `http:
 4. **In the app:**
    - Sidebar auto-uses llama.cpp at `http://localhost:8080` with model `local`.
    - Vision snapshot button will leverage a vision-capable GGUF if provided.
+   - For vision models (e.g., Qwen3-VL), start llama-server with both model and projector, e.g.:
+     ```bash
+     llama-server \
+       -m /path/to/Qwen3VL-8B-Instruct-Q4_K_M.gguf \
+       --mmproj /path/to/mmproj-Qwen3-VL-8B-Instruct-Q8_0.gguf \
+       --port 8080 --ctx-size 5000
+     ```
 
 ### No LLM (Optional)
 

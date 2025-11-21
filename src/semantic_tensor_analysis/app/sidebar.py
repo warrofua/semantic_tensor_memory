@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
-
 import streamlit as st
 
 from .models import cleanup_memory
 from semantic_tensor_analysis.storage.manager import StorageManager
+from pathlib import Path
 
 __all__ = ["render_simple_sidebar"]
 
@@ -15,9 +14,10 @@ __all__ = ["render_simple_sidebar"]
 def render_simple_sidebar() -> None:
     """Render a clean, minimal sidebar."""
     with st.sidebar:
-        logo_path = "semantic_tensor_art_logo.png"
-        if os.path.exists(logo_path):
-            st.image(logo_path, width=200)
+        assets_dir = Path(__file__).resolve().parent / "assets"
+        logo_path = assets_dir / "semantic_tensor_art_logo.png"
+        if logo_path.exists():
+            st.image(str(logo_path), width=200)
 
         dataset_info = st.session_state.get("dataset_info", {})
         if dataset_info.get("session_count", 0) > 0:

@@ -28,6 +28,7 @@ from pathlib import Path
 import sys
 import plotly.graph_objects as go
 import plotly.express as px
+import plotly.io as pio
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
@@ -43,6 +44,8 @@ DEMO_DATA_PATH = BASE_DIR / "data" / "ultimate_demo_dataset.csv"
 COMMON_APP_DIR = BASE_DIR / "src" / "semantic_tensor_analysis" / "app"
 if COMMON_APP_DIR.exists() and str(COMMON_APP_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_APP_DIR))
+ASSETS_DIR = COMMON_APP_DIR / "assets"
+LOGO_PATH = ASSETS_DIR / "semantic_tensor_art_logo.png"
 
 # Fix PyTorch/Streamlit compatibility issues
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -61,6 +64,18 @@ if torch is not None:
             torch._C._disable_jit_profiling()
     except Exception:
         pass
+
+# Cache recent Plotly figures for vision analysis
+_orig_plotly_chart = st.plotly_chart
+def _plotly_chart_with_cache(fig, *args, **kwargs):
+    try:
+        figs = st.session_state.get("recent_plotly_figs", [])
+        figs.append(fig)
+        st.session_state["recent_plotly_figs"] = figs[-5:]  # keep last 5
+    except Exception:
+        pass
+    return _orig_plotly_chart(fig, *args, **kwargs)
+st.plotly_chart = _plotly_chart_with_cache
 
 # Import Semantic Tensor Analysis modules
 from semantic_tensor_analysis import (
@@ -820,7 +835,7 @@ def render_simple_sidebar():
         SIDEBAR_CHAT_AVAILABLE = False
 
     with st.sidebar:
-        st.image("semantic_tensor_art_logo.png", width=200)
+        st.image(str(LOGO_PATH), width=200)
 
         # Dataset status (compact)
         dataset_info = st.session_state.get('dataset_info', {})

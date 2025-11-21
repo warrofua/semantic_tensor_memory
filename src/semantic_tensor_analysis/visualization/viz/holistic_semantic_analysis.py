@@ -24,6 +24,7 @@ import torch
 import umap
 
 from semantic_tensor_analysis.memory.text_embedder import TextEmbedder
+from semantic_tensor_analysis.utils.tensors import to_cpu_numpy
 
 _TEXT_EMBEDDER: TextEmbedder | None = None
 
@@ -829,7 +830,7 @@ def create_concept_network_plot(concept_embeddings: Dict[str, torch.Tensor],
     # Calculate 2D positions using UMAP
     concepts = list(concept_embeddings.keys())
     embeddings_matrix = torch.stack([concept_embeddings[c] for c in concepts])
-    embeddings_np = embeddings_matrix.detach().cpu().numpy()
+    embeddings_np = to_cpu_numpy(embeddings_matrix)
     
     # Use UMAP for better 2D projection
     try:

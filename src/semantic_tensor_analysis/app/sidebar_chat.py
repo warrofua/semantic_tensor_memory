@@ -9,6 +9,8 @@ import streamlit as st
 from pathlib import Path
 from typing import Optional, Dict, Any, Iterator, List
 import streamlit.components.v1 as components
+import base64
+import plotly.io as pio
 
 # Try to import file browser components
 try:
@@ -70,6 +72,19 @@ def _build_sidebar_prompt(base_context: Dict[str, Any], user_question: Optional[
     return base_prompt
 
 
+def _get_latest_plotly_snapshot() -> Optional[str]:
+    """Return a base64 PNG of the most recent Plotly figure, if available."""
+    figs = st.session_state.get("recent_plotly_figs") or []
+    if not figs:
+        return None
+    fig = figs[-1]
+    try:
+        img_bytes = pio.to_image(fig, format="png", width=1200, height=800, scale=1)
+        return base64.b64encode(img_bytes).decode("utf-8")
+    except Exception:
+        return None
+
+
 def _stream_sidebar_response(prompt: str, include_snapshot: bool) -> None:
     """Send prompt to LLM with safety checks; renders once to reduce websocket churn."""
     backend = st.session_state.get('llm_backend', 'none')
@@ -80,7 +95,7 @@ def _stream_sidebar_response(prompt: str, include_snapshot: bool) -> None:
         if snapshot:
             backend_config = {**backend_config, "image_base64": snapshot}
         else:
-            st.info("📸 Snapshot not available yet; sending text-only this time.")
+            st.info("📸 Snapshot not available; sending text-only this time.")
             include_snapshot = False
 
     if include_snapshot and backend != "llama_server":
@@ -113,6 +128,17 @@ def _stream_sidebar_response(prompt: str, include_snapshot: bool) -> None:
             placeholder.markdown(response)
             st.session_state['sidebar_chat_history'].append(("assistant", response))
         except Exception as e:
+            # Fallback: if vision not supported, retry without image
+            msg = str(e)
+            if include_snapshot and "image input is not supported" in msg.lower():
+                st.warning("📸 Backend does not support images (mmproj missing). Sending text-only.")
+                try:
+                    response = "".join(stream_unified_response(prompt, backend=backend))
+                    placeholder.markdown(response)
+                    st.session_state['sidebar_chat_history'].append(("assistant", response))
+                    return
+                except Exception as e2:
+                    msg = str(e2)
             error_msg = f"Error: {e}"
             placeholder.error(error_msg)
             st.session_state['sidebar_chat_history'].append(("assistant", error_msg))
@@ -260,22 +286,15 @@ def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
     Args:
         context: Optional context about current page/visualization
     """
+    # Ensure snapshot key exists and allow deferred resets before widgets instantiate.
+    if "page_snapshot_b64" not in st.session_state:
+        st.session_state["page_snapshot_b64"] = ""
+    if st.session_state.pop("reset_page_snapshot", False):
+        st.session_state["page_snapshot_b64"] = ""
 
     with st.sidebar:
         st.markdown("---")
         st.subheader("💬 Ask AI")
-
-        # Hidden snapshot field (only populated on demand when vision prompt is pending)
-        st.markdown(
-            "<style>[aria-label='page_snapshot_b64']{display:none !important;}</style>",
-            unsafe_allow_html=True,
-        )
-        st.text_input(
-            "page_snapshot_b64",
-            key="page_snapshot_b64",
-            label_visibility="collapsed",
-            help="Automatically filled with a page snapshot for vision models",
-        )
 
         # Initialize chat history
         if 'sidebar_chat_history' not in st.session_state:
@@ -292,45 +311,6 @@ def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
 
         # Gather analysis context for prompts
         analysis_context = collect_comprehensive_analysis_data() if CHAT_AVAILABLE else {}
-        pending_vision_prompt = st.session_state.get("vision_pending_prompt")
-        snapshot = st.session_state.get("page_snapshot_b64")
-
-        # If a vision prompt is waiting for a snapshot, trigger capture and pause processing
-        if pending_vision_prompt and not snapshot:
-            components.html(
-                """
-                <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-                <script>
-                (function() {
-                  const input = window.parent.document.querySelector('input[aria-label="page_snapshot_b64"]');
-                  if (!input || typeof html2canvas === 'undefined') return;
-                  html2canvas(window.parent.document.body, {
-                    scale: 0.5,
-                    logging: false,
-                    useCORS: true,
-                    ignoreElements: (el) => el.tagName && el.tagName.toLowerCase() === 'canvas',
-                  }).then(canvas => {
-                    try {
-                      const dataUrl = canvas.toDataURL('image/png').replace(/^data:image\\/png;base64,/, '');
-                      input.value = dataUrl;
-                      const event = new Event('input', { bubbles: true });
-                      input.dispatchEvent(event);
-                    } catch (e) {}
-                  }).catch(() => {});
-                })();
-                </script>
-                """,
-                height=0,
-            )
-            st.info("📸 Capturing page snapshot for vision model...")
-            st.stop()
-
-        # If we have a pending vision prompt and a snapshot, send it now
-        if pending_vision_prompt and snapshot:
-            prompt = pending_vision_prompt
-            st.session_state.pop("vision_pending_prompt", None)
-            _stream_sidebar_response(prompt, include_snapshot=True)
-            st.rerun()
 
         # Quick actions aligned with AI Insights tab
         col_a, col_b = st.columns(2)
@@ -383,11 +363,18 @@ def render_sidebar_chat(context: Optional[Dict[str, Any]] = None):
         if vision_clicked:
             prompt = _build_sidebar_prompt(
                 base_context=analysis_context,
-                user_question="Explain this page and its key insights using the attached snapshot.",
+                user_question="Explain this page and its key insights using the attached snapshot of the current chart/figure.",
                 deep=True,
             )
-            st.session_state["vision_pending_prompt"] = prompt
-            st.session_state["page_snapshot_b64"] = ""
+
+            snapshot_b64 = _get_latest_plotly_snapshot()
+            if snapshot_b64:
+                st.session_state["page_snapshot_b64"] = snapshot_b64
+                _stream_sidebar_response(prompt, include_snapshot=True)
+            else:
+                st.warning("📸 No chart snapshot available (no recent Plotly figure or kaleido missing); sending text-only.")
+                st.session_state["page_snapshot_b64"] = ""
+                _stream_sidebar_response(prompt, include_snapshot=False)
             st.rerun()
 
         # Clear chat button
