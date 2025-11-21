@@ -15,6 +15,15 @@ Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store an
 - Clinicians / ABA teams monitoring progress across notes
 - Anyone with time-stamped text who wants more than cosine similarity
 
+### Why STA (what’s different)
+- Dual-resolution memory: token-level (BERT) + sequence-level (SBERT) stored together for Hungarian token alignment, token drift heatmaps, and session trajectories without re-embedding.
+- Ragged, mask-aware analytics: pad/stack/flatten utilities consistently handle variable-length sessions across PCA, clustering, trajectories—no silent truncation.
+- Temporal semantics first: velocity/acceleration of meaning, inflection-point cues, and multi-view trajectories for ordered text (not just static similarity).
+- Concept evolution with alignment: session clustering + transition graphs plus token alignment to show *what* moved and *how*.
+- Vision grounding for charts: server-side Plotly→PNG snapshots fed to local vision GGUF (llama.cpp); graceful fallback to text-only if vision isn’t available.
+- Storage hygiene: built-in storage stats/cleanup (sidebar + CLI), CPU-portable persistence.
+- Grounded LLM context: prompts reuse analysis context (clusters, PCA axes, drift) instead of generic summaries.
+
 ### Core approach: dual resolution
 
 STA tracks meaning at two resolutions:
