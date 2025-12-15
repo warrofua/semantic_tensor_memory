@@ -378,6 +378,11 @@ def create_river_path_data(concept_drifts: Dict[str, List[float]],
         Dictionary with river path data for each concept
     """
     river_data = {}
+
+    def _safe_list(values: List[float]) -> List[float]:
+        """Ensure lists are JSON/Plotly safe (no NaN/inf)."""
+        import numpy as _np
+        return [float(_np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)) for v in values]
     
     # Handle empty concept_drifts
     if not concept_drifts:
@@ -441,11 +446,11 @@ def create_river_path_data(concept_drifts: Dict[str, List[float]],
         
         river_data[concept] = {
             'x': list(range(max_sessions)),
-            'y_top': stream_top,
-            'y_bottom': stream_bottom,
-            'widths': widths,
+            'y_top': _safe_list(stream_top),
+            'y_bottom': _safe_list(stream_bottom),
+            'widths': _safe_list(widths),
             'colors': colors,
-            'drifts': extended_drifts,
+            'drifts': _safe_list(extended_drifts),
             'events': events.get(concept, [])
         }
         
@@ -454,7 +459,7 @@ def create_river_path_data(concept_drifts: Dict[str, List[float]],
     
     # Add cumulative positions for annotations
     for concept in river_data:
-        river_data[concept]['y_center'] = cumulative_positions[concept]
+        river_data[concept]['y_center'] = _safe_list(cumulative_positions[concept])
     
     return river_data
 

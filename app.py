@@ -4,6 +4,18 @@ Semantic Tensor Analysis Application
 A comprehensive Streamlit application for analyzing semantic evolution across multiple modalities.
 """
 
+# Python 3.14 compatibility patch for TypedDict with 'closed' parameter
+import sys
+if sys.version_info >= (3, 14):
+    from typing import _TypedDictMeta
+    original_new = _TypedDictMeta.__new__
+
+    def patched_new(mcs, name, bases, ns, *, total=True, closed=None, **kwargs):
+        # Ignore the 'closed' parameter for Python 3.14+
+        return original_new(mcs, name, bases, ns, total=total, **kwargs)
+
+    _TypedDictMeta.__new__ = patched_new
+
 import streamlit as st
 import streamlit.components.v1 as components
 import time
@@ -35,6 +47,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
 from semantic_tensor_analysis.storage.manager import StorageManager
 from semantic_tensor_analysis.memory.universal_core import UniversalEmbedding
+from semantic_tensor_analysis.app.data_ingestion import _normalize_text  # reuse safe text handling
 
 BASE_DIR = Path(__file__).resolve().parent
 SRC_DIR = BASE_DIR / "src"
@@ -432,7 +445,7 @@ def handle_unified_upload(uploaded_file):
                     return False
                     
                 # Validate text column
-                text_found = any('text' in row and row['text'].strip() for row in session_data)
+                text_found = any('text' in row and _normalize_text(row['text']).strip() for row in session_data)
                 if not text_found:
                     st.error("❌ No 'text' column with content found in CSV")
                     return False
@@ -478,32 +491,21 @@ def process_unified_sessions(session_data, filename, content_type):
         
         # Apply intelligent processing strategy
         if profile.processing_strategy == "progressive_sampling":
-            st.warning(f"🎯 **Large Dataset Detected**: Using intelligent sampling for optimal performance")
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button(f"🔬 Smart Sample ({profile.recommended_batch_size} sessions)", type="primary"):
-                    session_data, selected_indices = adaptive_processor.apply_intelligent_sampling(
-                        session_data, profile.recommended_batch_size
-                    )
-                    st.success(f"✅ Applied intelligent sampling: {len(session_data)} sessions selected")
-                else:
-                    return False
-            
-            with col2:
-                if st.button(f"📊 Process First {profile.recommended_batch_size}"):
-                    session_data = session_data[:profile.recommended_batch_size]
-                    selected_indices = list(range(profile.recommended_batch_size))
-                    st.info(f"✅ Processing first {len(session_data)} sessions")
-                else:
-                    return False
-            
-            with col3:
-                if st.button("🔄 Cancel & Try Smaller File"):
-                    st.info("Consider splitting your data or using the sampling option")
-                    return False
-            
-            return False
+            st.warning("🎯 **Large Dataset Detected**: Auto-sampling to fit browser memory limits.")
+            browser_budget_mb = min(300, adaptive_processor.available_memory_gb * 1024 * 0.25)
+            per_session_mb = max(profile.estimated_memory_mb / max(profile.total_sessions, 1), 0.5)
+            target_sessions = max(2, int(browser_budget_mb / per_session_mb))
+            target_sessions = min(target_sessions, profile.total_sessions)
+            if target_sessions < 2:
+                target_sessions = min(profile.recommended_batch_size, profile.total_sessions)
+
+            session_data, selected_indices = adaptive_processor.apply_intelligent_sampling(
+                session_data, target_sessions
+            )
+            st.info(
+                f"✅ Sampled {len(session_data)} sessions (of {profile.total_sessions}) "
+                f"to stay within ~{int(browser_budget_mb)}MB browser budget."
+            )
         
         elif profile.processing_strategy == "smart_batching":
             st.info(f"🔄 **Smart Batching**: Processing in optimized batches of {profile.recommended_batch_size}")
@@ -569,7 +571,7 @@ def process_unified_sessions(session_data, filename, content_type):
             batch_successes = 0
             for i, row in enumerate(batch):
                 global_i = batch_start + i
-                text = row.get('text', '').strip()
+                text = _normalize_text(row.get('text')).strip()
                 
                 if text:
                     try:
@@ -711,6 +713,8 @@ def process_unified_sessions(session_data, filename, content_type):
             - **Quality**: {processing_quality['successful_embeddings']/(valid_sessions+skipped_sessions):.1%} success rate
             """)
             st.session_state["upload_success"] = True
+            st.session_state["redirect_to_analysis"] = True
+            st.session_state["active_tab"] = st.session_state.get("active_tab", "Overview")
             if st.button("➡️ Go to analysis", type="primary"):
                 st.rerun()
             
@@ -739,6 +743,11 @@ def process_unified_sessions(session_data, filename, content_type):
 
 def render_upload_screen():
     """Render the unified upload interface."""
+    if st.session_state.get("redirect_to_analysis"):
+        st.session_state.pop("redirect_to_analysis", None)
+        st.session_state["active_tab"] = st.session_state.get("active_tab", "Overview")
+        st.rerun()
+
     if st.session_state.get("upload_success") and len(st.session_state.get("memory", [])) > 0:
         st.success("✅ Dataset loaded. Continue to analysis.")
         if st.button("➡️ Go to analysis", type="primary"):
@@ -862,6 +871,32 @@ def render_simple_sidebar():
             st.markdown("**📐 Preferred Method:**")
             st.markdown(f"🎯 {preferred_method.upper()}")
             st.caption("Set in Dimensionality tab")
+
+        # Context and drift controls
+        st.markdown("---")
+        st.markdown("**Embedding Context**")
+        context_window_default = st.session_state.get("context_window_size", 3)
+        context_window_size = st.number_input(
+            "Previous sessions to include",
+            min_value=0,
+            max_value=10,
+            value=int(context_window_default),
+            step=1,
+            help="Adds prior session texts to the contextual prefix used during embedding. 0 disables context.",
+        )
+        st.session_state["context_window_size"] = int(context_window_size)
+
+        st.markdown("**Token Drift Alignment**")
+        drift_max_default = st.session_state.get("drift_max_length", 256)
+        drift_max_length = st.number_input(
+            "Token cap for alignment",
+            min_value=0,
+            max_value=2048,
+            value=int(drift_max_default),
+            step=32,
+            help="Max tokens per session for token-to-token drift (0 = no cap).",
+        )
+        st.session_state["drift_max_length"] = int(drift_max_length)
 
     # Add LLM config and chat to sidebar
     if SIDEBAR_CHAT_AVAILABLE:

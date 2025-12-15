@@ -195,6 +195,7 @@ class ChatSemanticAnalyzer:
         self.text_embedder = get_text_embedder()
         self.store = UniversalMemoryStore()
         self.max_user_messages = max_user_messages
+        self._context_window_size = self._resolve_context_window_size()
     
     def analyze_conversation_history(self, messages: List[ChatMessage]) -> ConversationAnalysis:
         """Analyze semantic evolution in conversation history."""
@@ -208,13 +209,30 @@ class ChatSemanticAnalyzer:
         
         # Process messages with Universal STM
         embeddings = []
+        recent_user_messages: List[str] = []
+        previous_timestamp: Optional[float] = None
         for i, msg in enumerate(user_messages):
             embedding = self.text_embedder.process_raw_data(
                 msg.content, 
-                session_id=f"message_{i}"
+                session_id=f"message_{i}",
+                context_window=recent_user_messages[-self._context_window_size:] if self._context_window_size > 0 else [],
+                temporal_position=i + 1,
+                total_sessions=len(user_messages),
+                domain_hint=None,
+                session_timestamp=msg.timestamp,
+                previous_timestamp=previous_timestamp,
             )
             embeddings.append(embedding)
             self.store.add_session(embedding)
+            recent_user_messages.append(msg.content)
+            previous_timestamp = msg.timestamp if msg.timestamp is not None else previous_timestamp
+
+    def _resolve_context_window_size(self) -> int:
+        try:
+            import streamlit as st
+            return int(st.session_state.get("context_window_size", 3))
+        except Exception:
+            return 3
         
         # Calculate overall semantic drift
         first_embedding = embeddings[0]

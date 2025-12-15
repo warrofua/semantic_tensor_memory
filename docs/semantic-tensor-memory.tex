@@ -81,20 +81,6 @@ STM enables rich semantic analytics with robust preprocessing and interpretable 
     \item \textbf{LLM-powered interpretation:} Local language models (e.g., via Ollama) generate clinical summaries and interpret principal axes by analyzing outlier tokens and associated keywords. This bridges quantitative drift metrics with narrative understanding.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.7\textwidth]{demo_session-to-session_semantic_drift.png}
-    \caption{Session-to-session semantic drift visualization showing the evolution of meaning across multiple conversation turns. The heatmap reveals patterns of semantic stability and change over time.}
-    \label{fig:drift}
-\end{figure}
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.7\textwidth]{demo_drift_map.png}
-    \caption{Detailed drift map illustrating token-level semantic changes. The visualization highlights how individual tokens shift in meaning across the conversation timeline.}
-    \label{fig:drift_map}
-\end{figure}
-
 \section{Applications}
 
 \subsection{Financial Market Intelligence and Narrative Drift}
@@ -143,13 +129,6 @@ To illustrate STM's interpretability, we present an analysis of ABA session note
     \item \textbf{Significance:} Indicates progress in self-regulation, communication, and social learning, with ongoing need for targeted intervention.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.7\textwidth]{summary_image.png}
-    \caption{Summary visualization of ABA session analysis. This figure provides an overview of key patterns and transitions identified in the session data.}
-    \label{fig:summary}
-\end{figure}
-
 \section{Limitations and Future Work}
 \begin{itemize}[leftmargin=2em]
     \item \textbf{Embedding model dependence:} STM quality depends on the expressivity of underlying transformer embeddings. Current implementation uses BERT, but could be extended to other models.
@@ -170,8 +149,5 @@ Semantic Tensor Memory reframes AI memory from static recall to the continuous e
 
 \section*{Acknowledgments}
 Thanks to my wife, family, and friends for their support and encouragement.
-
-\bibliographystyle{plain}
-\bibliography{stm_refs}
 
 \end{document}

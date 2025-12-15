@@ -11,6 +11,9 @@ import pandas as pd
 import numpy as np
 import torch
 from plotly.subplots import make_subplots
+from semantic_tensor_analysis.compat.typing import ensure_closed_typeddict_support
+
+ensure_closed_typeddict_support()
 import altair as alt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler

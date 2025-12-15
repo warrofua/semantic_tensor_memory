@@ -130,8 +130,9 @@ class ModalityEmbedder(ABC):
         """
         if session_id is None:
             session_id = f"{self.modality.value}_{int(time.time() * 1000000)}"
-        
+
         start_time = time.time()
+        provided_timestamp = kwargs.get("session_timestamp") or kwargs.get("timestamp")
         
         # Extract events from raw data
         events = self.extract_events(raw_data, **kwargs)
@@ -142,12 +143,13 @@ class ModalityEmbedder(ABC):
         # Update metadata
         processing_time = time.time() - start_time
         embedding.session_id = session_id
-        embedding.timestamp = start_time
+        embedding.timestamp = provided_timestamp if provided_timestamp is not None else start_time
         embedding.duration = processing_time
         embedding.processing_metadata.update({
             'processing_time': processing_time,
             'num_events': len(events),
-            'raw_data_type': type(raw_data).__name__
+            'raw_data_type': type(raw_data).__name__,
+            'ingestion_timestamp': embedding.timestamp,
         })
         
         return embedding
@@ -331,7 +333,11 @@ class UniversalMemoryStore:
         session_files = sorted(self.storage_path.glob("session_*.pkl"))
         for session_file in session_files:
             try:
-                embedding = torch.load(session_file, map_location=self._get_map_location())
+                embedding = torch.load(
+                    session_file,
+                    map_location=self._get_map_location(),
+                    weights_only=False,
+                )
                 self.embeddings.append(embedding)
                 modality = embedding.modality
                 self.modality_counts[modality] = self.modality_counts.get(modality, 0) + 1

@@ -82,7 +82,8 @@ class AdaptiveDataProcessor:
         sample_tokens = []
         
         for i in range(0, total_sessions, max(1, total_sessions // sample_size)):
-            text = session_data[i].get('text', '')
+            raw_text = session_data[i].get('text')
+            text = raw_text if isinstance(raw_text, str) else ("" if raw_text is None else str(raw_text))
             # Rough token estimate: 4 chars per token
             estimated_tokens = len(text) // 4
             sample_tokens.append(estimated_tokens)
@@ -142,7 +143,11 @@ class AdaptiveDataProcessor:
             temporal_samples.append(idx)
         
         # Strategy 2: Content diversity sampling (simple text length diversity)
-        text_lengths = [len(session.get('text', '')) for session in session_data]
+        text_lengths = []
+        for session in session_data:
+            raw_text = session.get('text')
+            text = raw_text if isinstance(raw_text, str) else ("" if raw_text is None else str(raw_text))
+            text_lengths.append(len(text))
         length_percentiles = np.percentile(text_lengths, [10, 25, 50, 75, 90])
         
         diversity_samples = []

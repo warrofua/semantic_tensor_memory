@@ -9,6 +9,7 @@ Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store an
 - ✅ Drift metrics and clustering for ordered text sessions (CSV/JSON/TXT)
 - ✅ Visual explanations (PCA, heatmaps, trajectories) tailored to time-ordered data
 - ✅ Domain presets for clinical notes, learning progress, research logs, and conversations
+- ✅ Context-aware embeddings (optional prior-session and timestamp signals) with configurable token drift caps
 
 ### Who is this for?
 - Researchers tracking concept drift over time
@@ -17,12 +18,14 @@ Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store an
 
 ### Why STA (what’s different)
 - Dual-resolution memory: token-level (BERT) + sequence-level (SBERT) stored together for Hungarian token alignment, token drift heatmaps, and session trajectories without re-embedding.
+- Contextual embedding: optional rolling context window + timestamps become lightweight prefixes to stabilize SBERT sequence embeddings while keeping raw token granularity intact.
 - Ragged, mask-aware analytics: pad/stack/flatten utilities consistently handle variable-length sessions across PCA, clustering, trajectories—no silent truncation.
 - Temporal semantics first: velocity/acceleration of meaning, inflection-point cues, and multi-view trajectories for ordered text (not just static similarity).
 - Concept evolution with alignment: session clustering + transition graphs plus token alignment to show *what* moved and *how*.
 - Vision grounding for charts: server-side Plotly→PNG snapshots fed to local vision GGUF (llama.cpp); graceful fallback to text-only if vision isn’t available.
 - Storage hygiene: built-in storage stats/cleanup (sidebar + CLI), CPU-portable persistence.
 - Grounded LLM context: prompts reuse analysis context (clusters, PCA axes, drift) instead of generic summaries.
+- Browser-safe ingestion: large CSV/JSON uploads auto-sample to stay within a conservative browser memory budget; configure context window and token-alignment cap from the sidebar.
 
 ### Core approach: dual resolution
 
@@ -101,7 +104,7 @@ for note in therapy_notes:
     streamlit run app.py
     ```
     - On first load, the sidebar opens to let you upload a CSV. After upload, the sidebar stays minimized for more canvas space.
-    - Try with `ultimate_demo_dataset.csv` or `aba_therapy_dataset.csv` in the repo root.
+    - Try with `ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`, or the longer `long_aba_dataset.csv` in the repo root (extended `long_aba_dataset_extended_28587.csv` for stress testing).
 
 4. **Interactive CLI demo (optional):**
     ```bash
@@ -176,13 +179,15 @@ Open in Jupyter/VS Code and run locally; both use the STA API (no Streamlit).
 - Session state management in Streamlit
 - Test suite coverage across embedding, storage, and viz
 - CLI demo for fast iteration
+- Sidebar controls let you set the rolling embedding context window (for SBERT prefixes) and a max token cap for Hungarian token drift (set to 0 to disable truncation).
 
 ---
 
 ## 📦 Datasets
 
 - `ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
-- `aba_therapy_dataset.csv`: ABA-specific schema/content; extended to a larger set for the same client.
+- `aba_therapy_dataset.csv`: ABA-specific schema/content.
+- `long_aba_dataset.csv`: Larger ABA slice for longer-run trajectories; `long_aba_dataset_extended_28587.csv` provides a heavier stress-test variant.
 
 Upload either via the Streamlit sidebar to explore the full suite of analyses.
 
@@ -247,6 +252,7 @@ You can use STA without any LLM backend. The core analysis and visualizations wo
 - Key dependencies: `torch`, `transformers`, `scikit-learn`, `plotly`, `streamlit`, `pandas`, `numpy`, `rich`, `requests`, `llama-cpp-python`.
 - **tkinter** (for file browser): Usually pre-installed with Python. On Linux, install with `sudo apt-get install python3-tk` if needed.
 - **Storage:** Session files are stored under `data/universal/`. Check sidebar storage stats and use the cleanup expander to prune old sessions; CLI available via `python -m semantic_tensor_analysis.storage.manager --stats` and cleanup options.
+- Python 3.14+: TypedDict `closed=` quirks are patched at import so Altair and other typing consumers continue to load.
 
 ---
 

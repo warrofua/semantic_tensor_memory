@@ -6,7 +6,7 @@ import csv
 import io
 import os
 import time
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -33,6 +33,13 @@ __all__ = [
 ]
 
 AI_CONVERSATION_MAX_USER_MESSAGES = 1200
+
+
+def _normalize_text(value: Any) -> str:
+    """Return a safe string for text fields, handling None and non-strings."""
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
 
 
 def _limit_ai_conversation_messages(messages, max_user_messages: int):
@@ -229,7 +236,7 @@ def handle_unified_upload(uploaded_file) -> bool:
                 if not session_data:
                     st.error("❌ The CSV file appears to be empty")
                     return False
-                text_found = any("text" in row and row["text"].strip() for row in session_data)
+                text_found = any("text" in row and _normalize_text(row["text"]).strip() for row in session_data)
                 if not text_found:
                     st.error("❌ No 'text' column with content found in CSV")
                     return False
@@ -267,36 +274,23 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
         )
 
         if profile.processing_strategy == "progressive_sampling":
-            st.warning("🎯 **Large Dataset Detected**: Using intelligent sampling for optimal performance")
+            st.warning("🎯 **Large Dataset Detected**: Auto-sampling to fit browser memory limits.")
+            # Estimate a browser-friendly memory budget (MB)
+            browser_budget_mb = min(300, adaptive_processor.available_memory_gb * 1024 * 0.25)
+            per_session_mb = max(profile.estimated_memory_mb / max(profile.total_sessions, 1), 0.5)
+            target_sessions = max(2, int(browser_budget_mb / per_session_mb))
+            target_sessions = min(target_sessions, profile.total_sessions)
 
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button(
-                    f"🔬 Smart Sample ({profile.recommended_batch_size} sessions)", type="primary"
-                ):
-                    session_data, selected_indices = adaptive_processor.apply_intelligent_sampling(
-                        session_data, profile.recommended_batch_size
-                    )
-                    st.success(
-                        f"✅ Applied intelligent sampling: {len(session_data)} sessions selected"
-                    )
-                else:
-                    return False
+            if target_sessions < 2:
+                target_sessions = min(profile.recommended_batch_size, profile.total_sessions)
 
-            with col2:
-                if st.button(f"📊 Process First {profile.recommended_batch_size}"):
-                    session_data = session_data[: profile.recommended_batch_size]
-                    selected_indices = list(range(profile.recommended_batch_size))
-                    st.info(f"✅ Processing first {len(session_data)} sessions")
-                else:
-                    return False
-
-            with col3:
-                if st.button("🔄 Cancel & Try Smaller File"):
-                    st.info("Consider splitting your data or using the sampling option")
-                    return False
-
-            return False
+            session_data, selected_indices = adaptive_processor.apply_intelligent_sampling(
+                session_data, target_sessions
+            )
+            st.info(
+                f"✅ Sampled {len(session_data)} sessions (of {profile.total_sessions}) "
+                f"to stay within ~{int(browser_budget_mb)}MB browser budget."
+            )
 
         if profile.processing_strategy == "smart_batching":
             st.info(
@@ -332,21 +326,37 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
             "skipped_short": 0,
         }
 
+        recent_texts: List[str] = []
+        previous_timestamp: Optional[float] = None
+        context_window_size = int(st.session_state.get("context_window_size", 3)) if hasattr(st, "session_state") else 3
+
         for batch_start in range(0, len(session_data), batch_size):
             batch_end = min(batch_start + batch_size, len(session_data))
             batch = session_data[batch_start:batch_end]
 
             for session in batch:
-                text = session.get("text", "").strip()
+                text = _normalize_text(session.get("text")).strip()
                 if not text:
                     skipped_sessions += 1
                     processing_quality["skipped_short"] += 1
                     continue
 
                 try:
+                    raw_ts = session.get("timestamp")
+                    try:
+                        session_timestamp = float(raw_ts) if raw_ts is not None else None
+                    except (TypeError, ValueError):
+                        session_timestamp = None
+
                     embedding = text_embedder.process_raw_data(
                         text,
                         session_id=session.get("session_id", str(valid_sessions)),
+                        context_window=recent_texts[-context_window_size:] if context_window_size > 0 else [],
+                        temporal_position=valid_sessions + 1,
+                        total_sessions=len(session_data),
+                        domain_hint=session.get("domain"),
+                        session_timestamp=session_timestamp,
+                        previous_timestamp=previous_timestamp,
                     )
                     universal_store.add_session(embedding)
                     st.session_state.active_modalities.add("text")
@@ -357,6 +367,8 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
                     memory.append(legacy_tensor)
                     meta.append(session)
                     valid_sessions += 1
+                    previous_timestamp = session_timestamp if session_timestamp is not None else previous_timestamp
+                    recent_texts.append(text)
                     processing_quality["successful_embeddings"] += 1
                 except Exception:
                     skipped_sessions += 1
@@ -478,6 +490,7 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
         """
         )
         st.session_state["upload_success"] = True
+        st.session_state["redirect_to_analysis"] = True
         if st.button("➡️ Go to analysis", type="primary"):
             st.rerun()
 
@@ -509,6 +522,11 @@ def process_unified_sessions(session_data, filename: str, content_type: str) -> 
 
 def render_upload_screen() -> None:
     """Render the unified upload interface."""
+    if st.session_state.get("redirect_to_analysis"):
+        st.session_state.pop("redirect_to_analysis", None)
+        st.session_state["active_tab"] = st.session_state.get("active_tab", "Overview")
+        st.rerun()
+
     # If a dataset was just loaded, offer a quick way back to the app surface
     if st.session_state.get("upload_success") and len(st.session_state.get("memory", [])) > 0:
         st.success("✅ Dataset loaded. Continue to analysis.")

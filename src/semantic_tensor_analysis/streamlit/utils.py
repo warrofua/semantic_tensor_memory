@@ -103,15 +103,21 @@ def remove_low_variance_features(X, threshold=1e-6):
     try:
         selector = VarianceThreshold(threshold=threshold)
         X_selected = selector.fit_transform(X)
-        
-        removed_count = X.shape[1] - X_selected.shape[1]
-        if removed_count > 0:
-            st.info(f"Removed {removed_count} low-variance features (variance < {threshold})")
-        
-        return X_selected, selector.get_support()
+    except ValueError as e:
+        # Happens when all features fall below threshold; keep original and avoid noisy warnings
+        if "No feature in X meets the variance threshold" in str(e):
+            return X, np.ones(X.shape[1], dtype=bool)
+        st.warning(f"Could not remove low-variance features: {e}")
+        return X, np.ones(X.shape[1], dtype=bool)
     except Exception as e:
         st.warning(f"Could not remove low-variance features: {e}")
         return X, np.ones(X.shape[1], dtype=bool)
+
+    removed_count = X.shape[1] - X_selected.shape[1]
+    if removed_count > 0:
+        st.info(f"Removed {removed_count} low-variance features (variance < {threshold})")
+    
+    return X_selected, selector.get_support()
 
 
 def robust_outlier_detection(X, method='iqr', factor=1.5):

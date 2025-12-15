@@ -1,10 +1,33 @@
+import logging
 import torch
 import numpy as np
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from scipy.spatial.distance import cosine
 from scipy.optimize import linear_sum_assignment
 
-def sequence_drift(tensors: List[torch.Tensor], max_length: int = 32) -> List[float]:
+try:  # Optional Streamlit coupling for runtime configuration
+    import streamlit as st  # type: ignore
+except Exception:  # pragma: no cover - streamlit not always present
+    st = None
+
+
+logger = logging.getLogger(__name__)
+DEFAULT_MAX_LENGTH = 256
+
+def _resolve_max_length(max_length: Optional[int]) -> Optional[int]:
+    if max_length is not None:
+        return max_length
+    if st is not None and hasattr(st, "session_state"):
+        try:
+            configured = st.session_state.get("drift_max_length")
+            if configured is not None:
+                configured = int(configured)
+                return None if configured <= 0 else configured
+        except Exception:
+            pass
+    return DEFAULT_MAX_LENGTH
+
+def sequence_drift(tensors: List[torch.Tensor], max_length: Optional[int] = None, warn_when_truncated: bool = True) -> List[float]:
     """
     Calculate drift between sessions using full token sequences.
     
@@ -13,19 +36,35 @@ def sequence_drift(tensors: List[torch.Tensor], max_length: int = 32) -> List[fl
     
     Args:
         tensors: List of session embeddings [tokens, embed_dim]
-        max_length: Max tokens to consider (for computational efficiency)
+        max_length: Max tokens to consider (for computational efficiency). If None, use all tokens.
+        warn_when_truncated: Emit a warning when truncation occurs.
     
     Returns:
         List of drift scores between consecutive sessions
     """
     if len(tensors) < 2:
         return []
-    
+
     drift_scores = []
+    effective_max_length = _resolve_max_length(max_length)
     
     for i in range(1, len(tensors)):
-        prev_session = tensors[i-1][:max_length]  # [tokens_prev, embed_dim]
-        curr_session = tensors[i][:max_length]    # [tokens_curr, embed_dim]
+        prev_session = tensors[i-1]
+        curr_session = tensors[i]
+
+        if effective_max_length is not None:
+            if warn_when_truncated and (
+                prev_session.shape[0] > effective_max_length or curr_session.shape[0] > effective_max_length
+            ):
+                logger.warning(
+                    "sequence_drift truncated sequences to max_length=%s (prev=%s, curr=%s). "
+                    "Increase max_length to avoid losing signal from longer sessions.",
+                    effective_max_length,
+                    prev_session.shape[0],
+                    curr_session.shape[0],
+                )
+            prev_session = prev_session[:effective_max_length]
+            curr_session = curr_session[:effective_max_length]
         
         # Compute pairwise token similarities
         prev_norm = torch.nn.functional.normalize(prev_session, p=2, dim=1)

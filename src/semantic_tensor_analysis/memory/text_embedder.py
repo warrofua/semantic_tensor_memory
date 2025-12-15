@@ -116,11 +116,32 @@ class TextEmbedder(ModalityEmbedder):
         # Reconstruct text from events for embedding
         original_text = events[0].metadata['original_text'] if events else ""
 
+        # Optional contextual signals (previous sessions, temporal position, domain hints)
+        context_window = kwargs.get("context_window") or []
+        temporal_position = kwargs.get("temporal_position") or kwargs.get("session_position")
+        total_sessions = kwargs.get("total_sessions")
+        domain_hint = kwargs.get("domain_hint") or kwargs.get("domain")
+        session_timestamp = kwargs.get("session_timestamp")
+        previous_timestamp = kwargs.get("previous_timestamp")
+
+        context_prefix = self._build_context_prefix(
+            context_window=context_window,
+            temporal_position=temporal_position,
+            total_sessions=total_sessions,
+            domain_hint=domain_hint,
+            session_timestamp=session_timestamp,
+            previous_timestamp=previous_timestamp,
+        )
+
+        # Use contextualized text for sequence-level embedding; keep raw text for token granularity
+        sequence_text = f"{context_prefix} {original_text}".strip() if context_prefix else original_text
+
         if self._use_stub:
-            torch.manual_seed(abs(hash(original_text)) % (2**31))
+            torch.manual_seed(abs(hash(sequence_text)) % (2**31))
             num_tokens = max(len(events), 1)
             event_embeddings = torch.randn(num_tokens, self._embedding_dim)
             sequence_embedding = torch.randn(self._embedding_dim)
+            context_vector = torch.randn(self._embedding_dim) if context_prefix else None
         else:
             # BERT: Event-level embeddings (token granularity)
             bert_inputs = self.bert_tokenizer(original_text, return_tensors="pt", truncation=True, padding=False)
@@ -128,11 +149,19 @@ class TextEmbedder(ModalityEmbedder):
             with torch.inference_mode():
                 bert_output = self.bert_model(**bert_inputs)
                 event_embeddings = bert_output.last_hidden_state.squeeze(0)  # [tokens, 768]
-                
-                # S-BERT: Sequence-level embedding (semantic quality)
-                sequence_embedding = self.sbert_model.encode(
-                    original_text, convert_to_tensor=True, show_progress_bar=False
+                context_vector = (
+                    self.sbert_model.encode(context_prefix, convert_to_tensor=True, show_progress_bar=False)
+                    if context_prefix
+                    else None
                 )
+                # S-BERT: Sequence-level embedding (semantic quality, contextualized)
+                sequence_embedding = self.sbert_model.encode(
+                    sequence_text, convert_to_tensor=True, show_progress_bar=False
+                )
+
+        if context_prefix and context_vector is not None:
+            # Broadcast context into token-level space to make drift sensitive to evolving meaning
+            event_embeddings = event_embeddings + context_vector.to(event_embeddings)
         
         # Calculate quality metrics
         event_coherence = 1.0 if self._use_stub else self._calculate_event_coherence(event_embeddings)
@@ -154,13 +183,67 @@ class TextEmbedder(ModalityEmbedder):
                 'text_length': len(original_text),
                 'num_tokens': len(events)
             },
-            processing_metadata={},  # Will be updated by process_raw_data
+            processing_metadata={
+                'context_applied': bool(context_prefix),
+                'context_window_size': len(context_window),
+                'temporal_position': temporal_position,
+                'total_sessions': total_sessions,
+                'domain_hint': domain_hint,
+                'context_prefix': context_prefix if context_prefix else None,
+            },
             event_coherence=event_coherence,
             sequence_coherence=sequence_coherence,
             extraction_confidence=extraction_confidence
         )
         
         return universal_embedding
+
+    def _build_context_prefix(
+        self,
+        context_window: List[str],
+        temporal_position: Optional[int],
+        total_sessions: Optional[int],
+        domain_hint: Optional[str],
+        session_timestamp: Optional[float],
+        previous_timestamp: Optional[float],
+    ) -> str:
+        """Assemble lightweight context string used to contextualize embeddings."""
+        parts: List[str] = []
+
+        if domain_hint:
+            parts.append(f"[DOMAIN: {domain_hint}]")
+
+        if temporal_position is not None:
+            if total_sessions:
+                parts.append(f"[SESSION {temporal_position}/{total_sessions}]")
+            else:
+                parts.append(f"[SESSION {temporal_position}]")
+
+        if session_timestamp is not None and previous_timestamp is not None:
+            delta = session_timestamp - previous_timestamp
+            parts.append(f"[DELTA_T: {delta:.1f}s]")
+
+        if context_window:
+            trimmed = [self._truncate_context_text(text) for text in context_window[-3:]]
+            merged_context = " || ".join(t for t in trimmed if t)
+            if merged_context:
+                parts.append(f"Previous context: {merged_context}")
+
+        joined = " ".join(parts).strip()
+        if not joined:
+            return ""
+        joined = " ".join(joined.split())  # normalize whitespace
+        max_len = 400
+        if len(joined) > max_len:
+            joined = joined[: max_len - 3] + "..."
+        return joined
+
+    def _truncate_context_text(self, text: str, limit: int = 240) -> str:
+        """Trim context text to avoid overly long prompts."""
+        text = text.strip()
+        if len(text) <= limit:
+            return text
+        return text[: limit - 3] + "..."
     
     def _calculate_event_coherence(self, event_embeddings: torch.Tensor) -> float:
         """Calculate coherence between adjacent events (tokens)."""

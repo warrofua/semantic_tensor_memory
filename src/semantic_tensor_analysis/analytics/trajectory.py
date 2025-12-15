@@ -8,6 +8,9 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+from semantic_tensor_analysis.compat.typing import ensure_closed_typeddict_support
+
+ensure_closed_typeddict_support()
 import altair as alt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -49,9 +52,15 @@ def calculate_semantic_trajectory_data(memory, meta):
     # Check PCA quality
     explained_var_ratio = pca.explained_variance_ratio_
     cumulative_var = np.sum(explained_var_ratio)
+    variance_threshold = 0.65
+    variance_reliable = cumulative_var >= variance_threshold
+    reliability_factor = min(1.0, cumulative_var / variance_threshold) if variance_threshold > 0 else 1.0
     
-    if cumulative_var < 0.5:
-        st.info(f"ℹ️ PCA explains {cumulative_var:.1%} of variance in session-level data. This is normal for high-dimensional semantic data.")
+    if not variance_reliable:
+        st.warning(
+            f"⚠️ PCA explains only {cumulative_var:.1%} of variance; semantic velocity/shift metrics are down-weighted. "
+            "Increase components or switch to UMAP/TSNE in Dimensionality tab for a fuller view."
+        )
     
     # Generate dynamic axis labels
     axis_labels = generate_dynamic_axis_labels(embeddings_3d, session_metadata, pca)
@@ -60,11 +69,15 @@ def calculate_semantic_trajectory_data(memory, meta):
     semantic_velocity = np.zeros(len(embeddings_3d))
     for i in range(1, len(embeddings_3d)):
         semantic_velocity[i] = np.linalg.norm(embeddings_3d[i] - embeddings_3d[i-1])
+    if not variance_reliable:
+        semantic_velocity *= reliability_factor
     
     # Calculate semantic acceleration (change in velocity)
     semantic_acceleration = np.zeros(len(semantic_velocity))
     for i in range(1, len(semantic_velocity)):
         semantic_acceleration[i] = abs(semantic_velocity[i] - semantic_velocity[i-1])
+    if not variance_reliable:
+        semantic_acceleration *= reliability_factor
     
     # Identify significant semantic shifts (high velocity)
     velocity_threshold = np.mean(semantic_velocity) + np.std(semantic_velocity)
@@ -78,7 +91,10 @@ def calculate_semantic_trajectory_data(memory, meta):
         'significant_shifts': significant_shifts,
         'axis_labels': axis_labels,
         'explained_var_ratio': explained_var_ratio,
-        'cumulative_var': cumulative_var
+        'cumulative_var': cumulative_var,
+        'variance_reliable': variance_reliable,
+        'variance_threshold': variance_threshold,
+        'reliability_factor': reliability_factor,
     }
 
 
