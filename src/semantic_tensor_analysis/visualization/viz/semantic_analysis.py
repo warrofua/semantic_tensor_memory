@@ -32,24 +32,25 @@ def analyze_with_ollama(texts: List[str], prompt: str) -> str:
 def analyze_pca_patterns(texts: List[str], scores: List[float]) -> str:
     """Use Ollama to analyze patterns in PCA results."""
     # Create a prompt for pattern analysis
-    prompt = f"""Analyze these clinical session notes and their PCA scores to identify key behavioral patterns.
-Focus on identifying meaningful clinical patterns, not just surface-level differences.
+    prompt = f"""Analyze these time-ordered session notes and their PCA scores to identify key semantic themes.
+Focus on identifying meaningful patterns, not just surface-level differences.
 
 Texts and scores:
 {chr(10).join(f'Score: {score:.2f} - {text}' for text, score in zip(texts, scores))}
 
 Please provide:
-1. A brief summary of the key behavioral patterns
-2. Clinical significance of these patterns
-3. Any notable transitions or changes
+1. A brief summary of the dominant themes
+2. What each PCA axis appears to capture
+3. Any notable transitions or shifts
 
-Keep the analysis concise and clinically relevant."""
+Keep the analysis concise and grounded in the provided text."""
 
     return analyze_with_ollama(texts, prompt)
 
-def generate_clinical_summary(reduced: np.ndarray, session_ids: np.ndarray,
-                            token_ids: np.ndarray, meta: List[Dict]) -> str:
-    """Generate a clinical summary of the PCA analysis using Ollama."""
+def generate_pca_interpretation(
+    reduced: np.ndarray, session_ids: np.ndarray, token_ids: np.ndarray, meta: List[Dict]
+) -> str:
+    """Generate a domain-agnostic interpretation of the PCA axes using Ollama."""
     # Get extreme points for each axis
     pca1_scores = reduced[:, 0]
     pca2_scores = reduced[:, 1]
@@ -66,9 +67,9 @@ def generate_clinical_summary(reduced: np.ndarray, session_ids: np.ndarray,
     pca2_pos_text = meta[session_ids[pca2_pos]]['text']
     pca2_neg_text = meta[session_ids[pca2_neg]]['text']
     
-    # Create prompt for clinical analysis
-    prompt = f"""Analyze these clinical session notes to identify key behavioral patterns and their clinical significance.
-Focus on understanding the underlying behavioral and emotional patterns.
+    # Create prompt for narrative analysis
+    prompt = f"""Analyze these session notes to interpret the PCA axes and identify key semantic themes.
+Focus on understanding the underlying themes, goals, constraints, and changes over time.
 
 Primary Axis (PCA-1) Examples:
 Positive: {pca1_pos_text}
@@ -79,15 +80,14 @@ Positive: {pca2_pos_text}
 Negative: {pca2_neg_text}
 
 Please provide:
-1. A clinical interpretation of each axis
-2. Key behavioral patterns identified
-3. Clinical significance of these patterns
-4. Any notable transitions or changes in behavior
+1. An interpretation of each axis (what varies from negative to positive)
+2. Key themes or patterns suggested by the axis extremes
+3. Any notable transitions or shifts across sessions
 
-Keep the analysis concise and clinically relevant."""
+Keep the analysis concise and grounded in the provided text."""
 
     return analyze_with_ollama([pca1_pos_text, pca1_neg_text, pca2_pos_text, pca2_neg_text], prompt)
 
-def print_clinical_analysis(analysis: str) -> None:
-    """Print the clinical analysis in a nicely formatted panel."""
-    console.print(Panel(analysis, title="Clinical Analysis", border_style="blue")) 
+def print_pca_interpretation(analysis: str) -> None:
+    """Print the PCA interpretation in a nicely formatted panel."""
+    console.print(Panel(analysis, title="PCA Interpretation", border_style="blue"))

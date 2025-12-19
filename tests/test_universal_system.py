@@ -40,7 +40,7 @@ def test_universal_text_embedding():
     text_embedder = TextEmbedder()
     
     # Test text
-    test_text = "The patient showed remarkable improvement in social engagement during today's session."
+    test_text = "The team showed remarkable improvement in collaboration during today's planning session."
     
     print(f"📝 Processing: '{test_text}'")
     

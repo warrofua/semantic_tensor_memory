@@ -29,13 +29,13 @@ def test_create_dual_embedding_shapes(stub_embeddings):
 def test_multi_resolution_drift_matches_component_metrics(stub_embeddings):
     """DualMemoryStore's drift analysis should mirror direct metric calculations."""
     store = stub_embeddings.dual_embedder.DualMemoryStore()
-    session_a = store.add_session("Calm focus during therapy")
-    session_b = store.add_session("Energetic planning after therapy")
+    session_a = store.add_session("Calm focus during planning")
+    session_b = store.add_session("Energetic planning after feedback")
 
     analysis = store.analyze_multi_resolution_drift(session_a, session_b)
 
-    emb_a = stub_embeddings.create_dual_embedding("Calm focus during therapy")
-    emb_b = stub_embeddings.create_dual_embedding("Energetic planning after therapy")
+    emb_a = stub_embeddings.create_dual_embedding("Calm focus during planning")
+    emb_b = stub_embeddings.create_dual_embedding("Energetic planning after feedback")
 
     expected_drift = sequence_drift([emb_a.token_embeddings, emb_b.token_embeddings])[0]
     expected_coherence_a = semantic_coherence_score(emb_a.token_embeddings)

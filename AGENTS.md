@@ -8,7 +8,7 @@
 
 ## 🎯 Project Mission
 
-**Semantic Tensor Analysis** is a temporal semantic evolution analysis framework that tracks how meaning changes across time, tokens, and context. It provides researchers, clinicians, and analysts with powerful tools to understand semantic trajectories through sessions of text.
+**Semantic Tensor Analysis** is a temporal semantic evolution analysis framework that tracks how meaning changes across time, tokens, and context. It provides researchers, builders, and analysts with powerful tools to understand semantic trajectories through sessions of text.
 
 ### Core Innovation: Dual-Resolution Temporal Analysis
 - **Token-level granularity** (BERT) - tracks individual concept drift
@@ -169,7 +169,7 @@ Optional: LLM narrative (Ollama)
 
 4. **LLM Integration**
    - ✅ Ollama integration
-   - ✅ Domain inference (ABA, clinical, learning, research)
+   - ✅ Domain inference (learning, research, projects, conversations)
    - ✅ Time-scale detection
    - ✅ Content-focused insights
 
@@ -453,7 +453,7 @@ tests/
 - **No data transmission**: All processing is local
 - **No telemetry**: No analytics or tracking
 - **Data ownership**: Users control all stored data
-- **Sensitive data**: Be mindful in clinical/personal contexts
+- **Sensitive data**: Be mindful with personal or proprietary text
 
 ---
 
@@ -468,7 +468,7 @@ tests/
 ### Demo Datasets
 
 - `data/ultimate_demo_dataset.csv` - Rich demo (60 sessions)
-- `data/aba_therapy_dataset.csv` - Clinical progress (80 sessions)
+- `data/demo_dataset.csv` - General-purpose narrative dataset
 - `data/demo_dataset.csv` - General demo (184 sessions)
 
 ### External Resources

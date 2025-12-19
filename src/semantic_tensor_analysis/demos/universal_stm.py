@@ -38,13 +38,13 @@ def demo_text_modality():
     # Create text embedder
     text_embedder = get_text_embedder()
     
-    # Sample clinical/therapeutic texts
+    # Sample general-purpose texts
     texts = [
-        "Patient shows significant improvement in social engagement today",
-        "Struggling with anxiety about upcoming work presentation", 
-        "Feeling more confident and optimistic about future goals",
-        "The therapy session helped me understand my emotional patterns",
-        "I'm developing better coping strategies for stress management"
+        "Weekly project check-in: scope is clearer and risks are identified",
+        "Preparing for a work presentation and refining the key message",
+        "Feeling more confident about the roadmap and next milestones",
+        "A focused reflection helped clarify what was blocking progress",
+        "Building better habits for handling stress during busy weeks"
     ]
     
     console.print(f"[dim]Processing {len(texts)} text sessions...[/dim]")

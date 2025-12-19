@@ -155,9 +155,9 @@ def plot(tensors: Sequence[torch.Tensor], meta: Sequence[Dict], title: str = "Se
     narrative = generate_narrative_summary(reduced, session_ids, token_ids, meta)
     print("\n" + narrative)
 
-    print("\n[bold]Generating clinical analysis...[/bold]")
-    clinical_analysis = generate_clinical_summary(reduced, session_ids, token_ids, meta)
-    print_clinical_analysis(clinical_analysis)
+    print("\n[bold]Generating PCA interpretation...[/bold]")
+    interpretation = generate_pca_interpretation(reduced, session_ids, token_ids, meta)
+    print_pca_interpretation(interpretation)
 
     df = pd.DataFrame(
         {
@@ -372,18 +372,18 @@ def analyze_with_ollama(texts: Sequence[str], prompt: str) -> str:
 def analyze_pca_patterns(texts: Sequence[str], scores: Sequence[float]) -> str:
     """Invoke :func:`analyze_with_ollama` with a PCA-oriented prompt."""
 
-    prompt = """Analyze these clinical session notes and their PCA scores to identify key behavioral patterns.
-Focus on identifying meaningful clinical patterns, not just surface-level differences.
+    prompt = """Analyze these time-ordered session notes and their PCA scores to identify key semantic themes.
+Focus on identifying meaningful patterns, not just surface-level differences.
 
 Texts and scores:
 {entries}
 
 Please provide:
-1. A brief summary of the key behavioral patterns
-2. Clinical significance of these patterns
-3. Any notable transitions or changes
+1. A brief summary of the dominant themes
+2. What each PCA axis appears to capture
+3. Any notable transitions or shifts
 
-Keep the analysis concise and clinically relevant.""".format(
+Keep the analysis concise and grounded in the provided text.""".format(
         entries="\n".join(
             f"Score: {score:.2f} - {text}" for text, score in zip(texts, scores)
         )
@@ -391,13 +391,13 @@ Keep the analysis concise and clinically relevant.""".format(
     return analyze_with_ollama(texts, prompt)
 
 
-def generate_clinical_summary(
+def generate_pca_interpretation(
     reduced: np.ndarray,
     session_ids: np.ndarray,
     token_ids: np.ndarray,
     meta: Sequence[Dict],
 ) -> str:
-    """Create a clinical interpretation prompt and call Ollama."""
+    """Create a domain-agnostic PCA interpretation prompt and call Ollama."""
 
     pca1_scores = reduced[:, 0]
     pca2_scores = reduced[:, 1]
@@ -411,8 +411,8 @@ def generate_clinical_summary(
     pca2_pos_text = meta[session_ids[pca2_pos]]["text"]
     pca2_neg_text = meta[session_ids[pca2_neg]]["text"]
 
-    prompt = f"""Analyze these clinical session notes to identify key behavioral patterns and their clinical significance.
-Focus on understanding the underlying behavioral and emotional patterns.
+    prompt = f"""Analyze these session notes to interpret the PCA axes and identify key semantic themes.
+Focus on understanding the underlying themes, goals, constraints, and changes over time.
 
 Primary Axis (PCA-1) Examples:
 Positive: {pca1_pos_text}
@@ -423,23 +423,22 @@ Positive: {pca2_pos_text}
 Negative: {pca2_neg_text}
 
 Please provide:
-1. A clinical interpretation of each axis
-2. Key behavioral patterns identified
-3. Clinical significance of these patterns
-4. Any notable transitions or changes in behavior
+1. An interpretation of each axis (what varies from negative to positive)
+2. Key themes or patterns suggested by the axis extremes
+3. Any notable transitions or shifts across sessions
 
-Keep the analysis concise and clinically relevant."""
+Keep the analysis concise and grounded in the provided text."""
 
     return analyze_with_ollama(
         [pca1_pos_text, pca1_neg_text, pca2_pos_text, pca2_neg_text], prompt
     )
 
 
-def print_clinical_analysis(analysis: str) -> None:
+def print_pca_interpretation(analysis: str) -> None:
     """Render the Ollama response in a :class:`rich.panel.Panel`."""
 
     console = Console()
-    console.print(Panel(analysis, title="Clinical Analysis", border_style="blue"))
+    console.print(Panel(analysis, title="PCA Interpretation", border_style="blue"))
 
 
 from collections import Counter  # noqa: E402  (import after function definitions)

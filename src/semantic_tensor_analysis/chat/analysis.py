@@ -1,7 +1,7 @@
 """Chat and LLM analysis functionality for Semantic Tensor Memory.
 
 This module contains chat interface and LLM-powered analysis functions
-for providing behavioral insights and interactive explanations focused on
+for providing practical insights and interactive explanations focused on
 semantic content rather than technical metrics.
 
 Supports multiple LLM backends:
@@ -38,8 +38,8 @@ def create_semantic_insights_prompt(analysis_data):
     
     prompt_parts = [
         "You are an expert analyst who adapts to the dataset domain.",
-        "First infer the domain from the session texts and metadata (e.g., ABA therapy/clinical notes, learning journals, software/project logs, research notes, general conversations).",
-        "Then adopt the most suitable perspective (e.g., ABA clinician, therapist, learning coach, project analyst, research mentor) and use domain-appropriate language.",
+        "First infer the domain from the session texts and metadata (e.g., learning journals, software/project logs, research notes, customer feedback, general conversations).",
+        "Then adopt the most suitable perspective (e.g., learning coach, project analyst, research mentor, writing tutor) and use domain-appropriate language.",
         "Focus on meaning and actionable insights rather than technical model metrics.",
         "",
         "SEMANTIC JOURNEY ANALYSIS:",
@@ -130,9 +130,9 @@ def create_semantic_insights_prompt(analysis_data):
         "2. KEY SHIFTS: What major transition points occurred and what likely drove them?",
         "3. CURRENT STATE: Based on recent patterns, what is the present phase/status?",
         "4. TIME-SCALE: Infer an appropriate time-scale for summarizing patterns based on the date span (e.g., if months of data, use weeks; if years, use months or quarters). " + (f"Hint: {time_hint}" if time_hint else ""),
-        "5. ACTIONABLE NEXT STEPS: Domain-appropriate recommendations (e.g., ABA interventions, study plan tweaks, project milestones, reflective practices).",
-        "5. RISKS & WATCHPOINTS: Any emerging issues or regressions to monitor.",
-        "6. DATA CAVEATS: Any limitations in the dataset that affect confidence.",
+        "5. ACTIONABLE NEXT STEPS: Domain-appropriate recommendations (e.g., study plan tweaks, project milestones, reflective practices).",
+        "6. RISKS & WATCHPOINTS: Any emerging issues, regressions, or blind spots to monitor.",
+        "7. DATA CAVEATS: Any limitations in the dataset that affect confidence.",
         "",
         "Ground every point in the session content. Keep language suitable for the inferred domain."
     ])
@@ -151,7 +151,7 @@ def create_targeted_insights_prompt(analysis_data):
         "DEEP-DIVE ANGLES (choose those most appropriate for the inferred domain):",
         "- Thematic structure: dominant themes and how they evolve.",
         "- Phase mapping: identify distinct phases/stages and transition drivers.",
-        "- Intervention/strategy review (if applicable): what worked, what didn’t, and why.",
+        "- Approach/strategy review (if applicable): what worked, what didn’t, and why.",
         "- Risks/regressions: early warning signs and mitigation ideas.",
         "- Next experiments/milestones: concrete, domain-appropriate steps.",
         "- Outcome metrics/KPIs: propose realistic indicators to track, tailored to the domain.",

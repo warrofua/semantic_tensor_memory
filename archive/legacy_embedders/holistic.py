@@ -45,7 +45,7 @@ def infer_semantic_theme(concepts: List[str]) -> Optional[str]:
     # Define semantic theme patterns
     theme_patterns = {
         "Work & Career": ["work", "job", "career", "professional", "office", "business", "company", "manager", "project", "meeting", "deadline"],
-        "Health & Wellness": ["health", "sleep", "exercise", "diet", "wellness", "medical", "doctor", "therapy", "stress", "anxiety", "depression"],
+        "Wellbeing & Habits": ["sleep", "exercise", "diet", "wellness", "stress", "burnout", "recovery", "routine", "habit", "balance"],
         "Relationships & Family": ["family", "relationship", "friend", "partner", "spouse", "children", "parent", "love", "social", "communication"],
         "Learning & Growth": ["learning", "education", "skill", "knowledge", "development", "growth", "improvement", "training", "study", "book"],
         "Technology & Tools": ["technology", "computer", "software", "digital", "online", "internet", "tool", "application", "system", "platform"],
@@ -84,11 +84,11 @@ def infer_semantic_theme(concepts: List[str]) -> Optional[str]:
         
         # Try to infer relationship between concepts
         if any(word in concept1.lower() for word in ["work", "job", "career"]) and \
-           any(word in concept2.lower() for word in ["stress", "anxiety", "pressure"]):
-            return "Work-Related Stress"
-        elif any(word in concept1.lower() for word in ["health", "wellness"]) and \
+           any(word in concept2.lower() for word in ["stress", "pressure", "burnout"]):
+            return "Workload & Pressure"
+        elif any(word in concept1.lower() for word in ["wellbeing", "habit", "routine"]) and \
              any(word in concept2.lower() for word in ["exercise", "diet", "sleep"]):
-            return "Health & Lifestyle"
+            return "Lifestyle & Habits"
         elif any(word in concept1.lower() for word in ["relationship", "family"]) and \
              any(word in concept2.lower() for word in ["communication", "support", "love"]):
             return "Social Connections"

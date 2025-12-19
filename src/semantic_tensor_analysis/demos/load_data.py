@@ -125,7 +125,7 @@ def get_streamlit_import_instructions():
     3. Use "Method Comparison" to find optimal dimensionality reduction
     4. Explore "Semantic Trajectory" for development path analysis
     5. Check "Ridgeline Plot" for feature evolution over time
-    6. Use "Clinical Analysis & Chat" for AI insights
+    6. Use "AI Insights & Chat" for AI insights
     
     🎯 WHAT TO LOOK FOR:
     

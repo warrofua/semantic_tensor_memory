@@ -6,7 +6,7 @@ from rich import print
 from rich.table import Table
 from rich.console import Console
 from .pca_summary import explain_pca_axes, generate_narrative_summary
-from .semantic_analysis import generate_clinical_summary, print_clinical_analysis
+from .semantic_analysis import generate_pca_interpretation, print_pca_interpretation
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -198,7 +198,7 @@ def plot(tensors: List[torch.Tensor], meta: List[Dict], title: str = "Semantic D
         - Token embeddings projected onto first two PCA components
         - Color-coded by session
         - Session boundaries marked with vertical lines
-        - Clinical and narrative summaries of the patterns
+        - Narrative summaries of the patterns
     """
     # Prepare data for PCA
     flat, session_ids, token_ids = prepare_for_pca(tensors)
@@ -219,10 +219,10 @@ def plot(tensors: List[torch.Tensor], meta: List[Dict], title: str = "Semantic D
     # Generate and print narrative summary
     print("\n" + generate_narrative_summary(reduced, session_ids, token_ids, meta))
     
-    # Generate and print clinical analysis using Ollama
-    print("\n[bold]Generating clinical analysis...[/bold]")
-    clinical_analysis = generate_clinical_summary(reduced, session_ids, token_ids, meta)
-    print_clinical_analysis(clinical_analysis)
+    # Generate and print PCA interpretation using Ollama
+    print("\n[bold]Generating PCA interpretation...[/bold]")
+    interpretation = generate_pca_interpretation(reduced, session_ids, token_ids, meta)
+    print_pca_interpretation(interpretation)
     
     # Create DataFrame for plotting
     df = pd.DataFrame({

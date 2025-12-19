@@ -20,22 +20,22 @@
 \maketitle
 
 \begin{abstract}
-We introduce \emph{Semantic Tensor Memory} (STM), a structured, interpretable memory system for tracking evolving meaning across time, tokens, and context. Unlike traditional flat vector stores, STM preserves a three-dimensional tensor of token-level embeddings over sequential conversation steps or document windows---enabling granular analysis of semantic drift, relational clustering, and transparent, modular storage. We formalize the STM architecture, present robust visualization and drift quantification techniques, and demonstrate applications in both clinical analytics and financial market intelligence. STM establishes a foundation for next-generation memory models in AI, offering interpretable, longitudinal insight for research, autonomous agents, and real-world decision support.
+We introduce \emph{Semantic Tensor Memory} (STM), a structured, interpretable memory system for tracking evolving meaning across time, tokens, and context. Unlike traditional flat vector stores, STM preserves a three-dimensional tensor of token-level embeddings over sequential conversation steps or document windows---enabling granular analysis of semantic drift, relational clustering, and transparent, modular storage. We formalize the STM architecture, present robust visualization and drift quantification techniques, and demonstrate applications in both organizational analytics and financial market intelligence. STM establishes a foundation for next-generation memory models in AI, offering interpretable, longitudinal insight for research, autonomous agents, and real-world analysis workflows.
 \end{abstract}
     
 
 \section{Introduction}
-Modern AI systems---from large language model (LLM) chatbots to clinical assistants and financial analytics engines---increasingly depend on external memory systems to maintain context, enable retrieval-augmented generation (RAG), and track evolving user or market intent. However, most contemporary architectures rely on either a limited context window or flat vector stores, both of which summarize text at the sentence or chunk level. This approach misses the fine-grained, temporal evolution of meaning that is often critical not only in healthtech and coaching, but also in high-stakes domains such as financial market intelligence, regulatory monitoring, and narrative-driven investing.
+Modern AI systems---from large language model (LLM) chatbots to analytics engines---increasingly depend on external memory systems to maintain context, enable retrieval-augmented generation (RAG), and track evolving user or market intent. However, most contemporary architectures rely on either a limited context window or flat vector stores, both of which summarize text at the sentence or chunk level. This approach misses the fine-grained, temporal evolution of meaning that is often critical in domains such as project/ops analytics, regulatory monitoring, and narrative-driven investing.
 
 We propose \textbf{Semantic Tensor Memory (STM)}: a three-dimensional tensor structure that stores the sequence of token embeddings per conversation turn or document window, providing a granular and interpretable representation of semantic change over time. STM empowers downstream agents---including LLMs and market analytics pipelines---to reason over not just ``what'' was said, but ``how'' meaning and context have shifted across time, transactions, or narratives.
 
-By moving beyond static recall toward a dynamic, drift-aware memory, STM opens new possibilities for longitudinal analysis in healthtech, interpretable LLM agents, and real-time narrative monitoring in finance and other high-impact verticals.
+By moving beyond static recall toward a dynamic, drift-aware memory, STM opens new possibilities for longitudinal analysis in interpretable LLM agents and real-time narrative monitoring in finance and other high-impact verticals.
 
 \section{Related Work}
 \begin{itemize}[leftmargin=2em]
     \item \textbf{Vector databases and RAG:} Tools like Pinecone, Chroma, and LangChain enable retrieval-augmented LLMs, but focus on document or chunk-level retrieval.
     \item \textbf{Memory-augmented neural networks:} Prior work (e.g., Differentiable Neural Computers, Transformer-XL) explores learnable tensor memories, but lacks user-facing interpretability.
-    \item \textbf{Semantic drift and behavioral analytics:} Behavioral science has long sought tools to monitor change in client language or intent, but current NLP applications rarely reach token-level granularity.
+    \item \textbf{Semantic drift and behavioral analytics:} Behavioral science has long sought tools to monitor change in user language or intent, but current NLP applications rarely reach token-level granularity.
 \end{itemize}
 
 \section{STM Architecture}
@@ -78,7 +78,7 @@ STM enables rich semantic analytics with robust preprocessing and interpretable 
     
     \item \textbf{Cosine drift heatmaps:} Quantify semantic change between steps using pairwise cosine distances, with optional masking of invalid comparisons.
     
-    \item \textbf{LLM-powered interpretation:} Local language models (e.g., via Ollama) generate clinical summaries and interpret principal axes by analyzing outlier tokens and associated keywords. This bridges quantitative drift metrics with narrative understanding.
+    \item \textbf{LLM-powered interpretation:} Local language models generate domain-appropriate summaries and interpret principal axes by analyzing outlier tokens and associated keywords. This bridges quantitative drift metrics with narrative understanding.
 \end{itemize}
 
 \section{Applications}
@@ -89,8 +89,8 @@ STM empowers real-time tracking of evolving narratives in financial news, social
 \subsection{Brand Monitoring and Social Listening}
 STM detects semantic drift in consumer conversations, product reviews, and media coverage—enabling brands to monitor shifts in perception, emerging trends, or potential crises. Marketers and PR teams can use STM analytics to adjust messaging, benchmark competitors, and intervene before negative narratives gain traction.
 
-\subsection{Healthtech, ABA, and Clinical QA}
-STM provides early warning of documentation drift in clinical notes or behavioral session logs, supporting proactive interventions in autism, ADHD, mental health, and quality assurance. Token-level tracking reveals subtle changes in patient status, adherence to protocols, or compliance risks, supplementing traditional audit tools with interpretable visualizations and alerts.
+\subsection{Operational Logs and Process QA}
+STM provides early warning of documentation drift in operational notes, project logs, and incident reports. Token-level tracking reveals subtle shifts in goals, risk posture, process compliance, and recurring failure modes, supplementing traditional audit tools with interpretable visualizations and alerts.
 
 \subsection{Reflective LLM Agents and Autonomous Systems}
 STM serves as an external memory for LLM-based agents, capturing not just what was said, but how meaning and intent have changed over time. This enables narrative coherence, meta-cognitive reasoning, and reflective feedback loops in conversational AI, customer support bots, or legal research assistants.
@@ -98,9 +98,9 @@ STM serves as an external memory for LLM-based agents, capturing not just what w
 \subsection{Education, Coaching, and Human Development}
 Longitudinal STM maps learning trajectories for students or clients, enabling adaptive instruction, personalized feedback, and the early detection of conceptual or motivational drift. Educators and coaches can visualize progress and tailor interventions for maximum growth.
 
-\section{Example Analysis: ABA Session Notes}
+\section{Example Analysis: Project Sprint Notes}
 
-To illustrate STM's interpretability, we present an analysis of ABA session notes from a 3-year-old with emerging speech, aggressive behavior, and elopement concerns. The STM pipeline yields principal component axes (PCA-1, PCA-2) and automated clinical summaries.
+To illustrate STM's interpretability, we present an analysis of project sprint notes across a multi-month delivery cycle. The STM pipeline yields principal component axes (PCA-1, PCA-2) and automated narrative summaries grounded in the observed text.
 
 \subsection{PCA Output and Interpretation}
 
@@ -120,13 +120,13 @@ To illustrate STM's interpretability, we present an analysis of ABA session note
     \end{itemize}
 \end{itemize}
 
-\subsection{Clinical Analysis Summary}
+\subsection{Analysis Summary}
 \begin{itemize}[leftmargin=2em]
-    \item \textbf{Axis 1:} Reflects engagement, spontaneous communication, and imitation; negatives mark frustration, sensory overload, or difficulty with transitions.
-    \item \textbf{Axis 2:} Captures initiation and social responsiveness; positives show reciprocity, negatives highlight regulation or environmental triggers.
-    \item \textbf{Key Patterns:} Spontaneous requests (``cookie,'' ``car''), imitation, aggression during demands, elopement on transitions, initiating play.
-    \item \textbf{Transitions:} Decreased aggression during cleanup, shift from hand-over-hand to independent imitation, improved elopement management.
-    \item \textbf{Significance:} Indicates progress in self-regulation, communication, and social learning, with ongoing need for targeted intervention.
+    \item \textbf{Axis 1:} Reflects exploration vs.\ execution; negatives indicate uncertainty and planning, positives emphasize delivery and iteration.
+    \item \textbf{Axis 2:} Captures quality vs.\ speed tradeoffs; positives emphasize reliability and testing, negatives emphasize velocity and scope expansion.
+    \item \textbf{Key Patterns:} Early emphasis on prototypes and unknowns; mid-phase on implementation and deadlines; late phase on stabilization and maintenance.
+    \item \textbf{Transitions:} Shift from exploration to delivery; later convergence toward reliability and process consistency.
+    \item \textbf{Significance:} Indicates maturation of the workstream, with watchpoints around recurring blockers and scope churn.
 \end{itemize}
 
 \section{Limitations and Future Work}
@@ -137,7 +137,7 @@ To illustrate STM's interpretability, we present an analysis of ABA session note
     
     \item \textbf{LLM integration:} Current implementation uses local LLMs (via Ollama) for interpretation and summaries. Future work could explore direct tensor-to-LLM interfaces for more sophisticated reasoning over semantic drift.
     
-    \item \textbf{Privacy and governance:} Token-level memory may expose sensitive semantic drift. Future work should explore privacy-preserving techniques and governance frameworks for clinical applications.
+    \item \textbf{Privacy and governance:} Token-level memory may expose sensitive semantic drift. Future work should explore privacy-preserving techniques and governance frameworks for sensitive or proprietary text.
     
     \item \textbf{Edge cases:} While the system handles common edge cases (variable length, missing data, numerical instability), more sophisticated error recovery and validation could improve robustness.
     
@@ -145,7 +145,7 @@ To illustrate STM's interpretability, we present an analysis of ABA session note
 \end{itemize}
 
 \section{Conclusion}
-Semantic Tensor Memory reframes AI memory from static recall to the continuous evolution of meaning---enabling interpretable, clinically relevant, and narratively coherent memory architectures. STM stands to advance AI safety, clinical transparency, and self-reflective agent design.
+Semantic Tensor Memory reframes AI memory from static recall to the continuous evolution of meaning---enabling interpretable, domain-relevant, and narratively coherent memory architectures. STM stands to advance AI safety, transparency, and self-reflective agent design.
 
 \section*{Acknowledgments}
 Thanks to my wife, family, and friends for their support and encouragement.

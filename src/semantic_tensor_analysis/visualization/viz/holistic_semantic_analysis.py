@@ -54,7 +54,7 @@ def infer_semantic_theme(concepts: List[str]) -> Optional[str]:
     # Define semantic theme patterns
     theme_patterns = {
         "Work & Career": ["work", "job", "career", "professional", "office", "business", "company", "manager", "project", "meeting", "deadline"],
-        "Health & Wellness": ["health", "sleep", "exercise", "diet", "wellness", "medical", "doctor", "therapy", "stress", "anxiety", "depression"],
+        "Wellbeing & Habits": ["sleep", "exercise", "diet", "wellness", "stress", "burnout", "recovery", "routine", "habit", "balance"],
         "Relationships & Family": ["family", "relationship", "friend", "partner", "spouse", "children", "parent", "love", "social", "communication"],
         "Learning & Growth": ["learning", "education", "skill", "knowledge", "development", "growth", "improvement", "training", "study", "book"],
         "Technology & Tools": ["technology", "computer", "software", "digital", "online", "internet", "tool", "application", "system", "platform"],

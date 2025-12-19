@@ -1,0 +1,323 @@
+% !TEX TS-program = pdflatex
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amsfonts,amssymb,mathtools}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{authblk}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{microtype}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\title{\bf Semantic Tensor Memory:\\ Interpretable, Drift-Aware Memory for Tracking Meaning Across Time, Events, and Context}
+
+\author[1]{Joshua Farrow\thanks{Correspondence: info@joshuafarrow.com}}
+\affil[1]{Independent Researcher / Applied AI Engineer, Richmond, VA, USA}
+
+\date{December 2025}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We introduce \emph{Semantic Tensor Memory} (STM), an interpretable external memory representation for longitudinal semantics. STM preserves event-level embeddings (e.g., token or atomic ``semantic event'' vectors) across ordered steps (conversation turns, project notes, dated documents), enabling measurement and explanation of semantic drift, inflection points, and concept evolution over time. Unlike flat vector stores that collapse text into chunk embeddings, STM makes \emph{time} and \emph{event granularity} first-class: each step stores a variable-length matrix of event embeddings, optionally paired with a sequence-level embedding for fast indexing and retrieval. We formalize STM as a \emph{ragged tensor field} (a masked rank-3 substrate) with a principled extension to higher-order (N-D) memory via additional index modes (speaker, modality, source, model layer, resolution). We provide drift metrics spanning centroid trajectories, velocity/acceleration, and alignment-based event drift (assignment/transport), along with robust visualization methods (PCA/UMAP, heatmaps, trajectory graphs) designed for variable-length sequences. We discuss system architecture, storage/index design, governance considerations for sensitive deployments, and applications in operational quality assurance, reflective agents, brand monitoring, and narrative-driven financial intelligence.
+\end{abstract}
+
+\vspace{0.5em}
+\noindent\textbf{Keywords:} external memory, semantic drift, concept evolution, interpretability, retrieval-augmented generation, longitudinal NLP, token embeddings, assignment alignment
+
+\section{Introduction}
+Large language models (LLMs) and modern analytics systems increasingly require external memory: to maintain continuity across sessions, to ground responses in long-lived records, and to detect changes in user intent or market regime. Today, the dominant memory pattern is retrieval via vector databases: text is chunked, embedded, indexed, and retrieved by similarity. This is effective for static recall, but it compresses rich temporal structure into a bag of points and often obscures \emph{how} meaning changes across time.
+
+In high-stakes domains, \emph{change} is the signal. Documentation drifts as projects evolve and teams shift their language. Organizations develop process drift that predicts audit risk. Markets reprice narratives before fundamentals fully update. In these settings, we need memory that can answer not only: ``What is relevant?'' but ``What has changed, when, and in what direction?''
+
+We propose \textbf{Semantic Tensor Memory (STM)}, an interpretable memory substrate that preserves event-level embeddings over ordered steps. STM turns a session into a time-ordered collection of event embedding matrices (ragged by nature) plus optional sequence-level embeddings for indexing. STM supports:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Granular drift:} event alignment and drift heatmaps, not just chunk similarity.
+  \item \textbf{Trajectory semantics:} centroid movement, velocity/acceleration, inflection-point cues.
+  \item \textbf{Dual resolution:} store both event-level (fine) and step-level (coarse) representations to keep analysis explainable and retrieval fast.
+  \item \textbf{N-D extensibility:} add modes (speaker, modality, source, model layer, temporal resolution) without losing a clean core.
+\end{itemize}
+
+\section{Contributions}
+STM is a design pattern rather than a single learned model. This paper contributes:
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{A formal memory object} for ordered text: STM as a ragged tensor field with explicit masking and optional batching.
+  \item \textbf{A practical architecture} for dual-resolution storage: event-level matrices + sequence-level embeddings + metadata.
+  \item \textbf{A family of drift metrics} spanning centroid drift, dynamics (velocity/acceleration), and alignment-based drift (assignment/transport).
+  \item \textbf{Robust visualization and diagnostics} for variable-length sequences that avoid silent truncation and report masking/validity.
+  \item \textbf{A principled answer to ``3D vs N-D''}: STM is minimally rank-3 in its semantic substrate, but naturally extends to N-D via additional indexed modes.
+\end{enumerate}
+
+\section{Related Work}
+\paragraph{Vector stores and retrieval-augmented generation (RAG).}
+RAG-style systems combine a parametric model with non-parametric memory by retrieving relevant documents at inference time \cite{lewis2020rag}. This improves factuality and domain grounding, but typical implementations store only chunk-level vectors and treat memory as an unordered set.
+
+\paragraph{Long-context and recurrence.}
+Architectures such as Transformer-XL introduce recurrence to capture longer dependencies without unbounded context windows \cite{dai2019transformerxl}. STM is complementary: it externalizes long-term structure into an inspectable memory that can be queried, summarized, and governed.
+
+\paragraph{Memory-augmented neural networks.}
+Differentiable external memory systems (e.g., DNC) demonstrate learnable read/write memory operations \cite{graves2016dnc}. STM focuses on \emph{user-facing interpretability} and system integration rather than end-to-end differentiable controllers.
+
+\paragraph{Embeddings at multiple granularities.}
+BERT provides contextual token embeddings \cite{devlin2018bert}. Sentence-BERT provides efficient sentence/sequence embeddings suitable for similarity search \cite{reimers2019sbert}. STM leverages this split directly: fine-grained event embeddings for explanation and alignment; coarse embeddings for indexing and retrieval.
+
+\paragraph{Dimensionality reduction and visualization.}
+UMAP is widely used to visualize high-dimensional embeddings with good global structure preservation \cite{mcinnes2018umap}. STM emphasizes \emph{mask-aware} projections for ragged sequences and the reporting of invalid rows (NaN/Inf/padding).
+
+\paragraph{Alignment-based comparisons.}
+To compare two unordered sets of events (tokens), one can compute similarity matrices and solve assignment problems with the Hungarian method \cite{kuhn1955hungarian}, or use optimal transport variants. STM uses alignment as an interpretable bridge: ``what moved'' becomes visible as matched event pairs.
+
+\section{Definitions and Formalism}
+\subsection{Steps, events, and embeddings}
+Let a \textbf{step} be a time-ordered unit: a conversation turn, a dated note, a document window, or a fixed time slice.
+At step $t \in \{1,\dots,T\}$, let $x_t$ be the raw text (or multimodal content). An \textbf{eventizer} maps $x_t$ to a sequence or set of $N_t$ events:
+\[
+E_t = \{e_{t,1}, \dots, e_{t,N_t}\}.
+\]
+In the simplest case, events are tokenizer subwords; in richer pipelines, events can be spans (entities, keyphrases), tool outputs, or structured fields.
+
+An embedding model produces an event embedding in $\mathbb{R}^D$ for each event. We store the step as a matrix:
+\[
+M_t \in \mathbb{R}^{N_t \times D}, \quad M_t[i,:] = \phi(e_{t,i};\, \text{context}).
+\]
+
+\subsection{STM as a ragged tensor field (the ``3D'' substrate)}
+Conceptually, STM is a rank-3 object indexed by \emph{time} $t$, \emph{event} $i$, and \emph{embedding channel} $d$. Because $N_t$ varies, we represent STM as a \emph{ragged tensor field}:
+\[
+\mathrm{STM}(x_{1:T}) \;\equiv\; \{M_t\}_{t=1}^T,\quad M_t \in \mathbb{R}^{N_t\times D}.
+\]
+For batch computation, we materialize a padded tensor and mask:
+\[
+\widetilde{M} \in \mathbb{R}^{T \times N_{\max} \times D},\qquad
+\widetilde{W} \in \{0,1\}^{T \times N_{\max}},
+\]
+where $\widetilde{W}_{t,i}=1$ iff event $i$ is valid at step $t$. All analytics in this paper are defined to be \emph{mask-respecting}.
+
+\subsection{Why it is ``3D'' and how it becomes N-D}
+The minimal semantic substrate needs (i) order, (ii) event granularity, and (iii) embedding channels. That yields the canonical rank-3 form. However, real systems require additional axes:
+\begin{itemize}[leftmargin=2em]
+  \item speaker/role $r$ (user/assistant/reviewer)
+  \item modality $m$ (text/audio/vision/sensor)
+  \item source/document stream $s$ (news outlet, payer policy, client ID)
+  \item embedding model/layer $\ell$ (multiple layers or multiple encoders)
+  \item temporal resolution $k$ (turn/day/week aggregation)
+\end{itemize}
+Rather than forcing a dense N-D tensor, STM treats these as \emph{index modes} over a family of ragged slices:
+\[
+M_{t}^{(m,r,s,\ell,k,\dots)} \in \mathbb{R}^{N_t \times D}.
+\]
+Thus STM is ``3D'' in its core slice but naturally \textbf{N-D as a tensor-of-tensors} keyed by additional modes.
+
+\section{System Architecture}
+\subsection{Dual-resolution memory}
+STM stores two coupled representations per step:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Event-level matrix} $M_t$ (fine, explainable, alignment-ready).
+  \item \textbf{Step-level vector} $z_t \in \mathbb{R}^{D_s}$ (coarse, indexable).
+\end{itemize}
+The step vector can be formed by pooling event embeddings (mask-aware mean) or by a separate sequence embedding model (e.g., Sentence-BERT) for fast approximate nearest-neighbor retrieval \cite{reimers2019sbert}.
+
+\subsection{Context-conditioned embeddings}
+``Meaning'' is contextual and temporal. STM supports lightweight contextualization:
+\[
+\phi(e_{t,i};\, c_t) \quad \text{where}\quad c_t = g(\text{metadata}_t,\, x_{t-w:t-1}).
+\]
+A simple and effective pattern is a \textbf{context prefix} $p_t$ concatenated to text before embedding (for sequence embeddings), encoding domain hints, timestamps, or a rolling window summary. This can stabilize trajectories while preserving raw event embeddings for interpretability.
+
+\subsection{Storage schema (conceptual)}
+A practical STM store can be implemented atop files, a relational DB, or a vector DB with sidecar blobs. A minimal schema:
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{session(id, metadata\_json)}
+  \item \texttt{step(session\_id, t, timestamp, raw\_text, z\_t, metadata\_json)}
+  \item \texttt{event(session\_id, t, i, span\_start, span\_end, token, v\_{t,i}, metadata\_json)}
+\end{itemize}
+where $v_{t,i}$ stores rows of $M_t$. For scale, $M_t$ can be stored as a compressed array (e.g., float16 + chunked compression) and loaded on demand.
+
+\section{Drift and Dynamics Metrics}
+We provide a toolkit; deployments select metrics based on cost, explainability, and sensitivity.
+
+\subsection{Step centroids and trajectory dynamics}
+Define the mask-aware centroid:
+\[
+\bar{m}_t = \frac{1}{\sum_i \widetilde{W}_{t,i}} \sum_{i=1}^{N_{\max}} \widetilde{W}_{t,i}\,\widetilde{M}_{t,i,:}.
+\]
+Define cosine drift between adjacent steps:
+\[
+\Delta^{\text{cent}}_t = 1-\cos(\bar{m}_{t-1},\bar{m}_t).
+\]
+With timestamps $\tau_t$, define velocity and acceleration (discrete):
+\[
+v_t = \frac{\bar{m}_t-\bar{m}_{t-1}}{\tau_t-\tau_{t-1}}, \qquad
+a_t = \frac{v_t-v_{t-1}}{\tau_t-\tau_{t-1}}.
+\]
+These yield interpretable ``semantic motion'' and highlight inflection points (spikes in $\|v_t\|$ or $\|a_t\|$).
+
+\subsection{Alignment-based event drift (assignment)}
+Centroid drift can miss changes when overall meaning stays similar but constituent concepts rotate. For steps $t-1$ and $t$, build a similarity matrix:
+\[
+S_{ij} = \cos\big(M_{t-1}[i,:],\, M_t[j,:]\big).
+\]
+Convert to costs $C_{ij}=1-S_{ij}$. The \textbf{assignment drift} solves:
+\[
+\pi^\star = \arg\min_{\pi \in \Pi} \sum_{i} C_{i,\pi(i)},
+\]
+where $\Pi$ is the set of one-to-one matchings between events (after optional truncation to a max length for cost control). The Hungarian method solves this in polynomial time \cite{kuhn1955hungarian}. Define:
+\[
+\Delta^{\text{assign}}_t = \frac{1}{|\pi^\star|} \sum_{i} C_{i,\pi^\star(i)}.
+\]
+This yields a \textbf{token/event drift heatmap}: matched pairs explain what persisted vs transformed.
+
+\subsection{Set-to-set drift variants}
+Depending on the deployment:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Mean-min drift:} for each event in $t$, find nearest neighbor in $t-1$.
+  \item \textbf{Transport drift:} relax one-to-one matching (optimal transport) for repeated concepts.
+  \item \textbf{Cluster transition drift:} cluster step-level vectors $\{z_t\}$ and examine regime transitions.
+\end{itemize}
+
+\section{Visualization and Diagnostics}
+STM is only useful if it stays interpretable under real-world messiness.
+
+\subsection{Mask-aware projections}
+Given a set of event vectors (or centroids), compute PCA or UMAP on valid rows only and report:
+\[
+\text{valid\_ratio} = \frac{\#\{\text{valid rows}\}}{\#\{\text{rows}\}}.
+\]
+Project either:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{All events:} show event clusters and how they shift per step.
+  \item \textbf{Centroids:} show a trajectory through embedding space.
+\end{itemize}
+UMAP is recommended for non-linear structure; PCA provides axis interpretability \cite{mcinnes2018umap}.
+
+\subsection{Drift heatmaps and alignment maps}
+For $T$ steps, compute a drift matrix $D \in \mathbb{R}^{T\times T}$ using centroid or assignment drift. Visualize:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Pairwise drift heatmap:} global view of regime shifts.
+  \item \textbf{Adjacent-step alignment map:} token-to-token drift explanation.
+\end{itemize}
+
+\subsection{Axis interpretation}
+To interpret PCA directions, select outlier events with extreme loadings and summarize them with lightweight heuristics or LLM-based labeling. The key constraint: axis labels must be grounded in \emph{observable exemplars} (tokens/spans and example texts), not hallucinated narratives.
+
+\section{Retrieval and Use in LLM Agents}
+STM supports retrieval at multiple resolutions:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Step retrieval:} nearest neighbors in $\{z_t\}$ for fast RAG-style grounding \cite{lewis2020rag}.
+  \item \textbf{Event retrieval:} find salient events matching a query embedding for explanation.
+  \item \textbf{Trajectory retrieval:} retrieve segments with high acceleration (inflection windows).
+\end{itemize}
+A reflective agent can use STM in a loop:
+\begin{enumerate}[leftmargin=2em]
+  \item Retrieve top-$k$ relevant steps by $z_t$ similarity.
+  \item Within each step, retrieve salient events (high similarity or high drift contribution).
+  \item Provide the LLM with \emph{evidence} (verbatim text spans + event summaries) and \emph{change signals} (drift metrics, inflection points).
+  \item Generate an answer plus a trace: ``what changed'' and ``why this retrieval supports the claim.''
+\end{enumerate}
+
+\section{Illustrative Example: Project Sprint Notes}
+This section illustrates what STM makes visible. Consider a time series of weekly sprint notes for a software project. Each note is a step; events are tokens or extracted spans; embeddings produce $M_t$ and $z_t$.
+
+STM can reveal:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Trajectory:} a drift from ``scoping and uncertainty'' clusters toward ``delivery and maintenance'' clusters.
+  \item \textbf{Inflection points:} spikes in semantic velocity after major scope shifts or incident response.
+  \item \textbf{Alignment evidence:} disappearance of high-drift events (e.g., ``prototype'') and emergence of stable concepts (e.g., ``refactor'', ``monitoring'').
+\end{itemize}
+
+\noindent\textbf{Note.} The above is an illustrative template; a full empirical section should report dataset details, preprocessing, model choices, and quantitative metrics (e.g., correlation with delivery metrics, incident rates, or audit findings).
+
+\section{Applications}
+\subsection{Operational QA and documentation governance}
+STM can detect documentation drift, measure consistency across teams/sites, and surface outlier wording that predicts compliance risk. Because STM exposes evidence at the event level, it supports auditability and reviewer trust.
+
+\subsection{Financial market intelligence and narrative drift}
+STM can embed headlines, filings, and commentary as ordered steps, measuring theme rotation and regime changes. The key is not ``sentiment'' alone but \emph{semantic transitions} (what the narrative becomes).
+
+\subsection{Brand monitoring and social listening}
+STM can track how customer language changes after releases or incidents, separating transient noise from sustained narrative shifts via drift dynamics.
+
+\subsection{Reflective agents and long-horizon autonomy}
+STM provides agents with an explicit memory of change, enabling ``meta'' reasoning: recognizing when user goals drift, when constraints change, and when old assumptions should be retired.
+
+\section{Governance, Privacy, and Safety}
+Token/event-level memory can expose sensitive information. High-stakes deployments require:
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Minimization:} store only what is needed (consider span-level events rather than raw tokens).
+  \item \textbf{Access control:} per-session and per-field policies; encrypt at rest.
+  \item \textbf{Retention and redaction:} deletion workflows that remove both raw text and derived embeddings.
+  \item \textbf{Auditability:} log retrieval queries, retrieved evidence, and downstream outputs.
+  \item \textbf{Bias monitoring:} drift metrics can amplify spurious correlations; evaluate across cohorts/sites.
+\end{itemize}
+
+\section{Limitations and Future Work}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Embedding dependence:} STM inherits strengths/weaknesses of embedding models (domain shift, tokenization artifacts). BERT-style token embeddings are contextual but may not align with human semantic units \cite{devlin2018bert}.
+  \item \textbf{Compute and storage:} event-level storage is heavier than chunk vectors. Compression, downsampling, and multi-resolution storage are important.
+  \item \textbf{Alignment cost:} assignment/transport drift can be expensive; practical systems cap event counts or use approximate matching \cite{kuhn1955hungarian}.
+  \item \textbf{Evaluation:} the most important metrics are domain-grounded: predicting audits, outcomes, or user satisfaction---not just intrinsic clustering quality.
+  \item \textbf{Multimodal STM:} extending events beyond text (audio/vision) is natural but requires careful eventization and alignment across modalities.
+\end{itemize}
+
+\section{Conclusion}
+Semantic Tensor Memory reframes external memory from static recall to \emph{interpretable semantic evolution}. By making time and event granularity first-class, STM supports drift-aware analysis, inflection detection, and explainable retrieval for real-world analysis workflows and reflective agents. The core substrate is rank-3 (time $\times$ events $\times$ channels), but STM generalizes cleanly to N-D through indexed modes (speaker, modality, source, layer, resolution) without requiring brittle dense tensors.
+
+\section*{Acknowledgments}
+Thanks to my wife, Elisa, and family, for their support and encouragement.
+
+\begin{thebibliography}{99}
+
+\bibitem{lewis2020rag}
+P.~Lewis et~al.
+\newblock Retrieval-augmented generation for knowledge-intensive {NLP} tasks.
+\newblock In \emph{NeurIPS}, 2020.
+\newblock \url{https://arxiv.org/abs/2005.11401}
+
+\bibitem{dai2019transformerxl}
+Z.~Dai et~al.
+\newblock Transformer-{XL}: Attentive language models beyond a fixed-length context.
+\newblock In \emph{ACL}, 2019.
+\newblock \url{https://arxiv.org/abs/1901.02860}
+
+\bibitem{graves2016dnc}
+A.~Graves et~al.
+\newblock Hybrid computing using a neural network with dynamic external memory.
+\newblock \emph{Nature}, 2016.
+\newblock (Commonly referenced as the Differentiable Neural Computer.)
+
+\bibitem{devlin2018bert}
+J.~Devlin et~al.
+\newblock {BERT}: Pre-training of deep bidirectional transformers for language understanding.
+\newblock 2018.
+\newblock \url{https://arxiv.org/abs/1810.04805}
+
+\bibitem{reimers2019sbert}
+N.~Reimers and I.~Gurevych.
+\newblock Sentence-{BERT}: Sentence embeddings using siamese {BERT}-networks.
+\newblock 2019.
+\newblock \url{https://arxiv.org/abs/1908.10084}
+
+\bibitem{mcinnes2018umap}
+L.~McInnes, J.~Healy, and J.~Melville.
+\newblock {UMAP}: Uniform manifold approximation and projection for dimension reduction.
+\newblock 2018.
+\newblock \url{https://arxiv.org/abs/1802.03426}
+
+\bibitem{kuhn1955hungarian}
+H.~W. Kuhn.
+\newblock The Hungarian method for the assignment problem.
+\newblock \emph{Naval Research Logistics Quarterly}, 1955.
+
+\end{thebibliography}
+
+\end{document}

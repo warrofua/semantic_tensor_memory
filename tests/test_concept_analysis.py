@@ -33,15 +33,15 @@ def test_concept_analysis():
     
     # Create test data with diverse concepts
     test_texts = [
-        "Patient exhibits signs of anxiety and stress related to work pressures",
-        "Work-related anxiety continues to manifest in sleep disturbances",
+        "Feeling stressed about a tight deadline and heavy workload",
+        "Work-related stress continues to impact sleep and focus",
         "Discussion of family relationships and childhood experiences",
-        "Exploring cognitive behavioral therapy techniques for anxiety management", 
+        "Exploring structured journaling techniques for stress management",
         "Family dynamics continue to influence current relationship patterns",
-        "Progress in anxiety management through mindfulness practices",
+        "Progress in stress management through mindfulness practices",
         "Deep dive into childhood trauma and its lasting effects",
-        "Family therapy session focusing on communication patterns",
-        "Breakthrough in understanding anxiety triggers and coping mechanisms",
+        "A dedicated conversation focusing on communication patterns",
+        "Breakthrough in understanding stress triggers and coping mechanisms",
         "Integration of family insights with personal growth goals"
     ]
     

@@ -8,12 +8,12 @@ Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store an
 - ✅ Token- and session-level embeddings (BERT + Sentence-BERT) in one pipeline
 - ✅ Drift metrics and clustering for ordered text sessions (CSV/JSON/TXT)
 - ✅ Visual explanations (PCA, heatmaps, trajectories) tailored to time-ordered data
-- ✅ Domain presets for clinical notes, learning progress, research logs, and conversations
+- ✅ Domain-adaptive summaries for learning logs, project journals, research notes, and conversations
 - ✅ Context-aware embeddings (optional prior-session and timestamp signals) with configurable token drift caps
 
 ### Who is this for?
 - Researchers tracking concept drift over time
-- Clinicians / ABA teams monitoring progress across notes
+- Builders and analysts working with time-ordered text (journals, standups, changelogs, feedback)
 - Anyone with time-stamped text who wants more than cosine similarity
 
 ### Why STA (what’s different)
@@ -31,7 +31,7 @@ Semantic Tensor Analysis (STA) sits on top of your embeddings or vector store an
 
 STA tracks meaning at two resolutions:
 - **Token-level** (BERT): follow individual concept drift
--, **Session-level** (Sentence-BERT): follow overall semantic movement
+- **Session-level** (Sentence-BERT): follow overall semantic movement
 
 Both are kept so you can align tokens while also inspecting higher-level trajectories.
 
@@ -39,14 +39,14 @@ Both are kept so you can align tokens while also inspecting higher-level traject
 
 ## 💡 Concrete Example: What Can STA Tell You?
 
-**Scenario: ABA Therapy Progress Tracking**
+**Scenario: Project Journal / Sprint Notes**
 
-You have 30 therapy session notes for a patient over 6 months:
+You have 30 weekly sprint notes over ~6 months:
 
 ```python
 # Load sessions
 store = UniversalMemoryStore()
-for note in therapy_notes:
+for note in sprint_notes:
     store.add_session(note)
 
 # Run analysis
@@ -55,16 +55,16 @@ for note in therapy_notes:
 **STA automatically reveals:**
 
 1. **Semantic Trajectory** (`evolution_tab`)
-   - "Patient meaning shifted from cluster 'behavioral challenges' (weeks 1-8) to 'skill acquisition' (weeks 9-20) to 'generalization' (weeks 21-30)"
-   - Velocity graph shows rapid progress in weeks 12-15, plateau in weeks 22-26
+   - "Themes shifted from 'scoping & uncertainty' (weeks 1–8) to 'implementation & delivery' (weeks 9–20) to 'stabilization & maintenance' (weeks 21–30)"
+   - Velocity graph shows rapid change around weeks 12–15, plateau around weeks 22–26
 
 2. **Token-Level Drift** (`token_alignment_heatmap`)
-   - Words that appeared/disappeared: "tantrum" (high early, faded), "independence" (emerged week 10), "peer interaction" (emerged week 18)
+   - Words that appeared/disappeared: "prototype" (high early, faded), "deadline" (emerged week 10), "refactor" (emerged week 18)
    - Optimal alignment shows which specific concepts persisted vs. transformed
 
 3. **Concept Evolution** (`concepts_tab`)
-   - KMeans identifies 4 semantic clusters: "regulation struggles", "skill building", "social engagement", "mastery"
-   - Transition graph shows patient moved through clusters sequentially with brief regression in week 23
+   - KMeans identifies clusters like "planning", "delivery", "quality", "launch"
+   - Transition graph shows the narrative moved through clusters with a brief regression in week 23
 
 4. **Inflection Points** (`trajectory_computation`)
    - Week 12: Acceleration spike (breakthrough moment)
@@ -72,14 +72,14 @@ for note in therapy_notes:
    - Week 28: Final acceleration (consolidation phase)
 
 5. **PCA Narrative** (`dimensionality_tab` + LLM)
-   - "PC1 (43% variance) represents 'independence vs. support needs'"
-   - "PC2 (28% variance) represents 'emotional regulation vs. dysregulation'"
-   - "Patient trajectory: moved positively along PC1 while PC2 oscillated, then stabilized"
+   - "PC1 (43% variance) represents 'exploration vs. execution'"
+   - "PC2 (28% variance) represents 'quality vs. speed'"
+   - "Trajectory: moved toward execution while oscillating on quality, then stabilized"
 
-6. **Domain-Aware Insights** (`AI_insights_tab`)
-   - "Based on 6-month span, this represents a typical ABA intensive phase"
-   - "The regression in week 23 aligns with expected variance in skill acquisition"
-   - "Recommend: Continue current approach, monitor for sustained generalization"
+6. **Narrative Insights** (`AI_insights_tab`)
+   - "The mid-project shift aligns with moving from ideation to delivery"
+   - "The regression around week 23 matches a scope change or external constraint"
+   - "Recommend: clarify milestones, watch for recurring blockers, and validate outcomes"
 
 **All of this from just uploading a CSV.** No custom code, no manual analysis.
 
@@ -104,7 +104,7 @@ for note in therapy_notes:
     streamlit run app.py
     ```
     - On first load, the sidebar opens to let you upload a CSV. After upload, the sidebar stays minimized for more canvas space.
-    - Try with `ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`, or the longer `long_aba_dataset.csv` in the repo root (extended `long_aba_dataset_extended_28587.csv` for stress testing).
+    - Try with `ultimate_demo_dataset.csv` or `finance_notes_expanded.csv` for a bigger stress test.
 
 4. **Interactive CLI demo (optional):**
     ```bash
@@ -126,7 +126,7 @@ for note in therapy_notes:
 - `src/semantic_tensor_analysis/chat/`: LLM integration (`llama_cpp_analyzer.py`, `unified_analyzer.py`, insights in `analysis.py`, history parsing).
 - `src/semantic_tensor_analysis/demos/`: CLI demos.
 - `archive/legacy_embedders/`: Archived embedders kept for compatibility only.
-- `data/`: Demo CSVs (`ultimate_demo_dataset.csv`, `aba_therapy_dataset.csv`).
+- `data/`: Demo CSVs (`ultimate_demo_dataset.csv`, `demo_dataset.csv`, `finance_notes.csv`).
 - `tests/`: Test suite.
 - `pyproject.toml`: Package metadata/dependencies.
 
@@ -134,7 +134,6 @@ for note in therapy_notes:
 
 ## 📘 Examples
 
-- `examples/aba_progress.ipynb`: Load ABA demo CSV → embed via API → quick PCA view.
 - `examples/finance_narrative.ipynb`: Embed narrative CSV → run concept clustering → inspect clusters.
 
 Open in Jupyter/VS Code and run locally; both use the STA API (no Streamlit).
@@ -161,12 +160,11 @@ Open in Jupyter/VS Code and run locally; both use the STA API (no Streamlit).
 ### LLM-assisted insights
 
 - Token + sentence embeddings kept together for downstream prompts
-- Domain-aware summaries (clinical, learning, research, conversations)
+- Domain-adaptive summaries (learning, research, projects, conversations)
 - Axis interpretation for PCA dimensions
 
 ### Workflows
 
-- Clinical progress tracking
 - Learning/journey mapping
 - Research note evolution
 - Conversation/topic drift
@@ -186,10 +184,10 @@ Open in Jupyter/VS Code and run locally; both use the STA API (no Streamlit).
 ## 📦 Datasets
 
 - `ultimate_demo_dataset.csv`: High-quality demo with clear trajectories and richer, longer texts.
-- `aba_therapy_dataset.csv`: ABA-specific schema/content.
-- `long_aba_dataset.csv`: Larger ABA slice for longer-run trajectories; `long_aba_dataset_extended_28587.csv` provides a heavier stress-test variant.
+- `demo_dataset.csv`: General-purpose narrative journey dataset.
+- `finance_notes.csv`, `finance_notes_expanded.csv`: Finance-themed notes (expanded version is a bigger stress test).
 
-Upload either via the Streamlit sidebar to explore the full suite of analyses.
+Upload any via the Streamlit sidebar to explore the full suite of analyses.
 
 Expected columns (typical): `session_id`, `date`, `title` (optional), `text`.
 
@@ -238,7 +236,7 @@ You can use STA without any LLM backend. The core analysis and visualizations wo
 - Sentence search
 - HTML dashboard
 - Enhanced multimodal support
-- Clinical applications
+- Product/ops applications
 
 ---
 
@@ -278,7 +276,7 @@ This section maps the `semantic-tensor-memory.tex` write-up (and associated PDF)
 | Data Import         | Yes            | Yes               | CSV upload in Streamlit; CLI import with tkinter.          |
 | Visualization       | Yes            | Yes               | PCA, heatmaps, token alignment, token trajectories.        |
 | LLM Integration     | Yes            | Yes               | Axis Explainer; domain-aware insights with time scale.     |
-| Applications        | Yes            | Yes               | ABA and general datasets provided.                         |
+| Applications        | Yes            | Yes               | Project, finance, and general datasets provided.          |
 | Example Analysis    | Yes            | Yes               | Demo datasets included.                                    |
 | Limitations/Future  | Yes            | Partial           | Multimodal audio, alerts, streaming, storage optimizations.|
 | UI/CLI Details      | Brief          | Yes               | More detail in codebase/README than in paper.              |
@@ -422,7 +420,7 @@ for session in sessions:
 | **Semantic drift analysis** | ❌ | ❌ | ✅ Token + session level |
 | **Token alignment** | ❌ | ❌ | ✅ Hungarian algorithm |
 | **Trajectory computation** | ❌ | ❌ | ✅ Velocity, acceleration |
-| **Domain-specific workflows** | ❌ | ❌ | ✅ Clinical, learning, research |
+| **Domain-specific workflows** | ❌ | ❌ | ✅ Projects, learning, research |
 
 **Use LangSmith/W&B for production monitoring. Use STA for deep temporal semantic analysis.**
 
@@ -443,7 +441,7 @@ inflection_points = detect_rapid_shifts(velocity)
 # → [session_5, session_12]  (when meaning changed rapidly)
 
 token_drift = token_importance_drift(session_1, session_3)
-# → ["anxiety": high drift, "coping": low drift]  (which concepts changed)
+# → ["deadline": high drift, "refactor": low drift]  (which concepts changed)
 ```
 
 **STA provides the calculus of semantic change, not just static snapshots.**
@@ -452,7 +450,7 @@ token_drift = token_importance_drift(session_1, session_3)
 
 **Session-based is intentional** for certain domains:
 
-- **Clinical notes**: Each therapy session is a natural boundary
+- **Project updates**: Each sprint/meeting note is a natural boundary
 - **Learning journeys**: Each lesson/assignment is discrete
 - **Research evolution**: Each draft/experiment is a snapshot
 - **Meeting summaries**: Each meeting is a unit of analysis
