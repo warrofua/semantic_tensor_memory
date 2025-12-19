@@ -15,7 +15,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          # Avoid pulling CUDA-enabled PyTorch wheels (and large nvidia-* deps) on CI runners.
+          pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch>=2.2"
+          pip install --no-cache-dir -e ".[tests]"
       - name: Run tests
         env:
           STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
